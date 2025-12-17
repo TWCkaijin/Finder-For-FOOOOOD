@@ -4,6 +4,10 @@ import { InputView } from './components/InputView';
 import { ResultView } from './components/ResultView';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { fetchRestaurants } from './services/geminiService';
+import { AuthButton } from './components/AuthButton';
+import { useAuth } from './contexts/AuthContext';
+import { getPreferences, savePreferences } from './services/api';
+import { useEffect } from 'react';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -24,16 +28,32 @@ const App: React.FC = () => {
   // Ref to hold the AbortController
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const { currentUser } = useAuth();
+
+  // Load preferences when user logs in
+  useEffect(() => {
+    if (currentUser) {
+      getPreferences().then(prefs => {
+        if (prefs && prefs.preferences) {
+          console.log("Loaded preferences:", prefs);
+          // Optional: merge prefs into state.params if you want to restore last search
+          // setState(prev => ({ ...prev, params: { ...prev.params, ...prefs.preferences } }));
+        }
+      }).catch(err => console.error("Failed to load prefs", err));
+    }
+  }, [currentUser]);
+
+
   const handleSearch = useCallback(async (params: SearchParams, isDevMode: boolean) => {
     // Create new controller for this search
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setState(prev => ({ 
-      ...prev, 
-      loading: true, 
+    setState(prev => ({
+      ...prev,
+      loading: true,
       loadingMessage: `Searching...`, // This base message is less important now, Overlay handles it
-      loadingError: null, 
+      loadingError: null,
       params,
       allRestaurants: [],
       displayedRestaurants: [],
@@ -42,33 +62,37 @@ const App: React.FC = () => {
       streamOutput: ''
     }));
 
+    if (currentUser) {
+      savePreferences({ preferences: params }).catch(e => console.error("Failed to save preferences", e));
+    }
+
     try {
       // Phase 1: Fetch initial 6
       const limit = 6;
-      
+
       const onStreamUpdate = (chunk: string) => {
-          // If aborted, stop updating stream output to avoid state updates on unmounted/hidden components
-          if (controller.signal.aborted) return;
-          
-          setState(prev => ({
-              ...prev,
-              streamOutput: prev.streamOutput + chunk
-          }));
+        // If aborted, stop updating stream output to avoid state updates on unmounted/hidden components
+        if (controller.signal.aborted) return;
+
+        setState(prev => ({
+          ...prev,
+          streamOutput: prev.streamOutput + chunk
+        }));
       };
 
       // Pass the selected model, language and the signal to the service
       const results = await fetchRestaurants(
-          params.location, 
-          params.keywords, 
-          params.radius, 
-          limit, 
-          params.model,
-          params.language,
-          [], 
-          isDevMode ? onStreamUpdate : undefined,
-          controller.signal 
+        params.location,
+        params.keywords,
+        params.radius,
+        limit,
+        params.model,
+        params.language,
+        [],
+        isDevMode ? onStreamUpdate : undefined,
+        controller.signal
       );
-      
+
       // Critical check: If aborted during fetch, stop here.
       if (controller.signal.aborted) return;
 
@@ -77,7 +101,7 @@ const App: React.FC = () => {
       }
 
       const initialShownIds = new Set<string>();
-      
+
       // For both List and Random mode, we now display all initial results (initially 6).
       // Random mode will handle the visual presentation (carousel) in ResultView.
       const initialDisplay = results;
@@ -91,23 +115,23 @@ const App: React.FC = () => {
         shownRestaurantIds: initialShownIds,
         displayedRestaurants: initialDisplay,
         error: null,
-        isBackgroundFetching: true 
+        isBackgroundFetching: true
       }));
 
       // Phase 2: Background Fetch (Fetching more without user waiting)
       // Note: We use existing results names to try to find DIFFERENT ones, but Schema mode is stricter.
       const excludeNames = results.map(r => r.name);
-      
+
       fetchRestaurants(params.location, params.keywords, params.radius, 9, params.model, params.language, excludeNames).then((moreResults) => {
         // Only update if the user hasn't started a new search or cancelled
         if (abortControllerRef.current === controller && !controller.signal.aborted) {
-             setState(current => {
-                return {
-                    ...current,
-                    allRestaurants: [...current.allRestaurants, ...moreResults],
-                    isBackgroundFetching: false
-                };
-             });
+          setState(current => {
+            return {
+              ...current,
+              allRestaurants: [...current.allRestaurants, ...moreResults],
+              isBackgroundFetching: false
+            };
+          });
         }
       }).catch(e => {
         console.log("Background fetch ended/aborted", e);
@@ -116,15 +140,15 @@ const App: React.FC = () => {
     } catch (err: any) {
       // If aborted, do nothing (state already reset by handleCancelSearch)
       if (controller.signal.aborted) {
-          return;
+        return;
       }
 
       // Instead of alert, set loadingError to show in Overlay
       const errorMsg = (err as Error).message;
-      setState(prev => ({ 
-          ...prev, 
-          loading: true, 
-          loadingError: errorMsg 
+      setState(prev => ({
+        ...prev,
+        loading: true,
+        loadingError: errorMsg
       }));
     }
   }, []);
@@ -132,29 +156,29 @@ const App: React.FC = () => {
   const handleCancelSearch = useCallback(() => {
     // 1. Abort the underlying request
     if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     // 2. Immediately update UI to stop loading and return to input view
-    setState(prev => ({ 
-        ...prev, 
-        loading: false, 
-        loadingError: null,
+    setState(prev => ({
+      ...prev,
+      loading: false,
+      loadingError: null,
     }));
   }, []);
 
   const handleCloseLoading = useCallback(() => {
-      setState(prev => ({ ...prev, loading: false, loadingError: null }));
+    setState(prev => ({ ...prev, loading: false, loadingError: null }));
   }, []);
 
   const handleNext = useCallback(() => {
     setState(prev => {
       const { allRestaurants, shownRestaurantIds, params, displayedRestaurants } = prev;
-      
+
       const available = allRestaurants.filter(r => !shownRestaurantIds.has(r.id));
 
       if (available.length === 0) {
-        return prev; 
+        return prev;
       }
 
       const newShownIds = new Set(shownRestaurantIds);
@@ -176,41 +200,44 @@ const App: React.FC = () => {
   const handleBack = useCallback(() => {
     // Abort any ongoing background fetch when going back
     if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
 
-    setState(prev => ({ 
-      ...prev, 
-      view: 'input', 
-      allRestaurants: [], 
+    setState(prev => ({
+      ...prev,
+      view: 'input',
+      allRestaurants: [],
       displayedRestaurants: [],
       isBackgroundFetching: false
     }));
   }, []);
 
-  const isExhausted = !state.isBackgroundFetching && 
-    state.allRestaurants.length > 0 && 
+  const isExhausted = !state.isBackgroundFetching &&
+    state.allRestaurants.length > 0 &&
     state.allRestaurants.every(r => state.shownRestaurantIds.has(r.id));
 
   return (
-    <div className="antialiased text-gray-900 bg-white dark:bg-gray-900 min-h-screen">
+    <div className="antialiased text-gray-900 bg-white dark:bg-gray-900 min-h-screen relative">
+      <div className="absolute top-4 right-4 z-50">
+        <AuthButton />
+      </div>
       {state.loading && (
-          <LoadingOverlay 
-            message={state.loadingMessage} 
-            error={state.loadingError} 
-            isDevMode={state.isDeveloperMode}
-            streamOutput={state.streamOutput}
-            language={state.params.language}
-            onClose={handleCloseLoading} 
-            onCancel={handleCancelSearch} 
-          />
+        <LoadingOverlay
+          message={state.loadingMessage}
+          error={state.loadingError}
+          isDevMode={state.isDeveloperMode}
+          streamOutput={state.streamOutput}
+          language={state.params.language}
+          onClose={handleCloseLoading}
+          onCancel={handleCancelSearch}
+        />
       )}
-      
+
       {state.view === 'input' ? (
         <InputView onSearch={handleSearch} isLoading={state.loading} />
       ) : (
-        <ResultView 
+        <ResultView
           restaurants={state.displayedRestaurants}
           params={state.params}
           onBack={handleBack}
