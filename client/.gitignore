@@ -1,5 +1,4 @@
 *.env
-firebase.ts
 # Logs
 logs
 *.log
