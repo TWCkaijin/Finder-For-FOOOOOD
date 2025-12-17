@@ -11,10 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm ci && npm run build
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "client/pnpm-lock.yaml"
+
+      - name: Install and Build
+        run: |
+          cd client
+          pnpm install --frozen-lockfile
+          pnpm run build
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FINDER_FOR_FOOOOOD }}
           channelId: live
           projectId: finder-for-foooood
+          entryPoint: ./client
