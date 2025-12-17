@@ -1,0 +1,7 @@
+{
+  "name": "Gourmet Finder AI",
+  "description": "Smart food recommendation engine powered by Gemini with real-time Google Search grounding.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
