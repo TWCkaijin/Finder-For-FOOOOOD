@@ -1,0 +1,2 @@
+[![Deploy to Firebase Hosting](https://github.com/TWCkaijin/Finder-For-FOOOOOD/actions/workflows/firebase-hosting-merge.yml/badge.svg)](https://github.com/TWCkaijin/Finder-For-FOOOOOD/actions/workflows/firebase-hosting-merge.yml)
+[![Deploy Information PR](https://github.com/TWCkaijin/Finder-For-FOOOOOD/actions/workflows/firebase-hosting-pull-request.yml/badge.svg)](https://github.com/TWCkaijin/Finder-For-FOOOOOD/actions/workflows/firebase-hosting-pull-request.yml)
