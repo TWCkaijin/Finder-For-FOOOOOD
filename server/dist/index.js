@@ -14,7 +14,16 @@ const app = (0, express_1.default)();
 const port = process.env.PORT || 5000;
 // Middleware
 app.use((0, cors_1.default)());
-app.use(express_1.default.json());
+// Conditionally apply body parser
+// In Cloud Functions Gen 2, req.body might already be parsed by the platform
+app.use((req, res, next) => {
+    if (req.body) {
+        next();
+    }
+    else {
+        express_1.default.json()(req, res, next);
+    }
+});
 const loggerMiddleware_1 = require("./middleware/loggerMiddleware");
 app.use(loggerMiddleware_1.requestLogger);
 // Initialize Firebase
@@ -28,7 +37,10 @@ app.get('/', (req, res) => {
     res.send('Gourmet Finder Server is running');
 });
 // Start server
-exports.api = (0, https_1.onRequest)({}, app);
+exports.api = (0, https_1.onRequest)({
+    cors: true,
+    invoker: 'public', // Allow unauthenticated access (Cloud Run Invoker role for allUsers)
+}, app);
 if (process.env.LOCAL_DEV === 'true') {
     app.listen(port, () => {
         console.log(`Server is running on port ${port}`);

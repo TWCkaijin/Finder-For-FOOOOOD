@@ -11,7 +11,17 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+
+// Conditionally apply body parser
+// In Cloud Functions Gen 2, req.body might already be parsed by the platform
+app.use((req, res, next) => {
+    if (req.body) {
+        next();
+    } else {
+        express.json()(req, res, next);
+    }
+});
 
 import { requestLogger } from './middleware/loggerMiddleware';
 app.use(requestLogger);
