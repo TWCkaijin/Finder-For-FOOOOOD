@@ -1,6 +1,6 @@
 import { Restaurant, Language } from "../types";
 
-const SERVER_URL = 'http://localhost:5001/api'; // Same as api.ts, maybe share constant?
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const fetchRestaurants = async (
   location: string,

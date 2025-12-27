@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { SearchParams, Language } from '../types';
+import { getHistory } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface InputViewProps {
   onSearch: (params: SearchParams, isDevMode: boolean) => void;
@@ -33,7 +35,7 @@ const FloatingFood = React.memo(() => {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-30">
       {STATIC_FOOD_ITEMS.map((item, i) => (
-        <div 
+        <div
           key={i}
           className="absolute text-4xl animate-float select-none"
           style={item.style}
@@ -46,6 +48,7 @@ const FloatingFood = React.memo(() => {
 });
 
 export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => {
+  const { currentUser } = useAuth();
   const [displayLocation, setDisplayLocation] = useState('');
   const [hiddenCoords, setHiddenCoords] = useState<string | null>(null);
   const [keywords, setKeywords] = useState('');
@@ -55,25 +58,39 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
   const [isLocating, setIsLocating] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
   const [showError, setShowError] = useState(false);
-  
+
+  const [history, setHistory] = useState<{ searchKeywords: string[], recommendedHistory: string[] }>({ searchKeywords: [], recommendedHistory: [] });
+
   // Mouse position for Card 3D Tilt effect only
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-        // Calculate normalized position (-1 to 1)
-        const x = (e.clientX / window.innerWidth - 0.5) * 2;
-        const y = (e.clientY / window.innerHeight - 0.5) * 2;
-        setMousePos({ x, y });
+      // Calculate normalized position (-1 to 1)
+      const x = (e.clientX / window.innerWidth - 0.5) * 2;
+      const y = (e.clientY / window.innerHeight - 0.5) * 2;
+      setMousePos({ x, y });
     };
 
     // Only add listener on non-touch devices to save performance
     if (window.matchMedia("(hover: hover)").matches) {
-        window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mousemove', handleMouseMove);
     }
 
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  // Fetch history
+  useEffect(() => {
+    if (currentUser) {
+      getHistory().then(data => {
+        if (data && (data.recommendedHistory.length > 0 || data.searchKeywords.length > 0)) {
+          setHistory(data);
+          console.log("History loaded:", data);
+        }
+      });
+    }
+  }, [currentUser]);
 
   // Helper to parse hidden coords string "lat, lng"
   const parseCoords = (coordsStr: string | null) => {
@@ -108,8 +125,8 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInput()) return;
-    
-    onSearch({ 
+
+    onSearch({
       ...getCommonParams(),
       mode: 'list',
     }, isDevMode);
@@ -118,9 +135,9 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
   const handleRandomSearch = () => {
     if (!validateInput()) return;
 
-    onSearch({ 
+    onSearch({
       ...getCommonParams(),
-      keywords: "", 
+      keywords: "",
       mode: 'random',
     }, isDevMode);
   };
@@ -129,6 +146,18 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
     setDisplayLocation(e.target.value);
     setHiddenCoords(null);
     if (showError) setShowError(false);
+  };
+
+  const handleHistoryClick = (name: string) => {
+    setKeywords(name);
+    if (!validateInput()) return;
+
+    onSearch({
+      ...getCommonParams(),
+      keywords: name,
+      mode: 'list', // Switch to list first (App defaults to list), user can toggle map.
+      // Alternatively, pass 'map' if supported. Let's use list for now as it shows the card.
+    }, isDevMode);
   };
 
   const handleUseCurrentLocation = () => {
@@ -207,19 +236,19 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-gray-50 dark:bg-[#0a0a0a] font-display transition-colors">
-      
+
       {/* Background Layers - Static and Memoized */}
       <div className="absolute inset-0 pointer-events-none">
-         <BackgroundBlobs />
+        <BackgroundBlobs />
       </div>
-      
+
       <div className="absolute inset-0 pointer-events-none">
-         <FloatingFood />
+        <FloatingFood />
       </div>
 
       <div className="layout-container flex h-full grow flex-col justify-center items-center py-6 px-4 z-10">
         <div className="layout-content-container flex flex-col w-full max-w-lg">
-          
+
           {/* Title Section - Static (Removed Parallax) */}
           <div className="flex flex-col items-center text-center mb-10 sm:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
             <h1 className="text-4xl sm:text-5xl font-black leading-tight tracking-tighter bg-gradient-to-r from-green-600 via-emerald-500 to-teal-500 dark:from-green-400 dark:via-emerald-300 dark:to-teal-300 bg-clip-text text-transparent drop-shadow-sm">
@@ -231,70 +260,70 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
           </div>
 
           {/* Main Card with 3D Tilt */}
-          <div 
+          <div
             className="relative backdrop-blur-xl bg-white/70 dark:bg-black/40 rounded-3xl shadow-2xl border border-white/50 dark:border-white/10 ring-1 ring-black/5 dark:ring-white/5 animate-in zoom-in-95 duration-500 transition-transform duration-100 ease-out will-change-transform"
-            style={{ 
-                transformStyle: 'preserve-3d',
-                transform: `perspective(1000px) rotateX(${mousePos.y * -1.5}deg) rotateY(${mousePos.x * 1.5}deg)` 
+            style={{
+              transformStyle: 'preserve-3d',
+              transform: `perspective(1000px) rotateX(${mousePos.y * -1.5}deg) rotateY(${mousePos.x * 1.5}deg)`
             }}
           >
-            
+
             {/* Top Toolbar: Minimalist Capsule Style (Borderless) */}
-            <div 
-                className="absolute -top-10 right-0 flex items-center gap-2 transition-transform duration-200"
-                style={{ transform: `translateZ(20px)` }}
+            <div
+              className="absolute -top-10 right-0 flex items-center gap-2 transition-transform duration-200"
+              style={{ transform: `translateZ(20px)` }}
             >
-                {/* Language Pill */}
-                <div className="flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full pl-2 pr-1 py-1 transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
-                    <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[14px] mr-1">language</span>
-                    <select
-                        className="bg-transparent text-[11px] font-bold text-gray-600 dark:text-gray-300 cursor-pointer focus:outline-none appearance-none pr-2 border-none ring-0 p-0"
-                        value={selectedLanguage}
-                        onChange={(e) => setSelectedLanguage(e.target.value as Language)}
-                        disabled={isLoading}
-                    >
-                        <option value="zh-TW">繁體中文</option>
-                        <option value="en">English</option>
-                        <option value="ja">日本語</option>
-                    </select>
-                </div>
+              {/* Language Pill */}
+              <div className="flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full pl-2 pr-1 py-1 transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
+                <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[14px] mr-1">language</span>
+                <select
+                  className="bg-transparent text-[11px] font-bold text-gray-600 dark:text-gray-300 cursor-pointer focus:outline-none appearance-none pr-2 border-none ring-0 p-0"
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value as Language)}
+                  disabled={isLoading}
+                >
+                  <option value="zh-TW">繁體中文</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                </select>
+              </div>
 
-                {/* Model Pill */}
-                <div className="hidden sm:flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full pl-2 pr-1 py-1 transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
-                     <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[14px] mr-1">smart_toy</span>
-                    <select
-                        className="bg-transparent text-[11px] font-bold text-gray-600 dark:text-gray-300 cursor-pointer focus:outline-none appearance-none pr-2 border-none ring-0 p-0"
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
-                        disabled={isLoading}
-                    >
-                        <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
-                    </select>
-                </div>
+              {/* Model Pill */}
+              <div className="hidden sm:flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full pl-2 pr-1 py-1 transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
+                <span className="material-symbols-outlined text-gray-500 dark:text-gray-400 text-[14px] mr-1">smart_toy</span>
+                <select
+                  className="bg-transparent text-[11px] font-bold text-gray-600 dark:text-gray-300 cursor-pointer focus:outline-none appearance-none pr-2 border-none ring-0 p-0"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={isLoading}
+                >
+                  <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+                </select>
+              </div>
 
-                {/* Dev Mode Pill */}
-                <label className="flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full px-2 py-1 cursor-pointer transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
-                    <input 
-                        type="checkbox" 
-                        value="" 
-                        className="sr-only peer" 
-                        checked={isDevMode}
-                        onChange={() => setIsDevMode(!isDevMode)}
-                    />
-                    <div className="relative w-6 h-3 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all dark:border-gray-500 peer-checked:bg-input-primary"></div>
-                    <span className="ml-1.5 text-[10px] font-bold text-gray-600 dark:text-gray-300">DEV</span>
-                </label>
+              {/* Dev Mode Pill */}
+              <label className="flex items-center bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full px-2 py-1 cursor-pointer transition-all hover:bg-black/10 dark:hover:bg-white/20 hover:scale-105">
+                <input
+                  type="checkbox"
+                  value=""
+                  className="sr-only peer"
+                  checked={isDevMode}
+                  onChange={() => setIsDevMode(!isDevMode)}
+                />
+                <div className="relative w-6 h-3 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all dark:border-gray-500 peer-checked:bg-input-primary"></div>
+                <span className="ml-1.5 text-[10px] font-bold text-gray-600 dark:text-gray-300">DEV</span>
+              </label>
             </div>
 
             <form onSubmit={handleSearch} className="flex flex-col gap-6 p-6 sm:p-8">
-              
+
               {/* Location Input - Staggered entrance */}
-              <div 
-                className="flex flex-col flex-1 group animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards" 
+              <div
+                className="flex flex-col flex-1 group animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                 style={{ animationDelay: '100ms' }}
               >
                 <p className={`text-sm font-bold leading-normal pb-1.5 transition-colors ${showError ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                    {t.location} {showError && <span className="text-xs font-normal ml-1">({selectedLanguage === 'en' ? 'Required' : '必填'})</span>}
+                  {t.location} {showError && <span className="text-xs font-normal ml-1">({selectedLanguage === 'en' ? 'Required' : '必填'})</span>}
                 </p>
                 <div className={`flex w-full items-stretch rounded-xl shadow-sm transition-all duration-300 ring-1 ${showError ? 'ring-red-400 shadow-red-100' : 'ring-gray-200 dark:ring-white/10 focus-within:ring-2 focus-within:ring-input-primary focus-within:shadow-lg focus-within:shadow-input-primary/20'}`}>
                   <div className="relative flex-grow z-10">
@@ -304,7 +333,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
                       value={displayLocation}
                       onChange={handleLocationChange}
                       disabled={isLoading || isLocating}
-                      required 
+                      required
                     />
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       <span className={`material-symbols-outlined text-xl transition-colors ${showError ? 'text-red-400' : 'text-gray-400 group-focus-within:text-input-primary'}`}>location_on</span>
@@ -329,50 +358,47 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
               </div>
 
               {/* Keywords Input - Staggered entrance */}
-              <div 
-                className="flex flex-col w-full group animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards" 
+              <div
+                className="flex flex-col w-full group animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                 style={{ animationDelay: '200ms' }}
               >
                 <p className="text-sm font-bold leading-normal pb-1.5 text-gray-700 dark:text-gray-200">{t.keyword}</p>
                 <div className="relative flex w-full items-center rounded-xl bg-transparent ring-1 ring-gray-200 dark:ring-white/10 shadow-sm focus-within:ring-2 focus-within:ring-input-primary focus-within:shadow-lg focus-within:shadow-input-primary/20 transition-all duration-300">
-                    <input
+                  <input
                     className="flex w-full min-w-0 flex-1 bg-transparent h-12 px-4 text-sm font-medium text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none border-none focus:ring-0 rounded-xl"
                     placeholder={t.placeholderKey}
                     value={keywords}
                     onChange={(e) => setKeywords(e.target.value)}
                     disabled={isLoading}
-                    />
-                    <span className="pointer-events-none absolute right-3 text-gray-400 group-focus-within:text-input-primary material-symbols-outlined text-xl transition-colors">search</span>
+                  />
+                  <span className="pointer-events-none absolute right-3 text-gray-400 group-focus-within:text-input-primary material-symbols-outlined text-xl transition-colors">search</span>
                 </div>
               </div>
 
               {/* Radius Select - Staggered entrance */}
-              <div 
+              <div
                 className="flex flex-col flex-1 animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                 style={{ animationDelay: '300ms' }}
               >
-                  <p className="text-sm font-bold leading-normal pb-1.5 text-gray-700 dark:text-gray-200">{t.radius}</p>
-                  <div className="relative group">
-                      <select
-                      className="appearance-none flex w-full min-w-0 flex-1 bg-transparent ring-1 ring-gray-200 dark:ring-white/10 shadow-sm focus:ring-2 focus:ring-input-primary focus:shadow-lg focus:shadow-input-primary/20 rounded-xl h-12 px-4 text-sm font-medium text-gray-900 dark:text-white pr-8 focus:outline-none border-none focus:ring-0 transition-all duration-300 cursor-pointer"
-                      value={radius}
-                      onChange={(e) => setRadius(e.target.value)}
-                      disabled={isLoading}
-                      >
-                      <option value="250m">250m</option>
-                      <option value="1km">1km</option>
-                      <option value="5km">5km</option>
-                      <option value="10km">10km</option>
-                      <option value="unlimited">{selectedLanguage === 'en' ? 'Unlimited' : '無限制'}</option>
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 group-focus-within:text-input-primary transition-colors">
-                      <span className="material-symbols-outlined text-xl">expand_more</span>
-                      </div>
-                  </div>
+                <p className="text-sm font-bold leading-normal pb-1.5 text-gray-700 dark:text-gray-200">{t.radius}</p>
+                <div className="relative group">
+                  <select
+                    className="appearance-none flex w-full min-w-0 flex-1 bg-transparent ring-1 ring-gray-200 dark:ring-white/10 shadow-sm focus:ring-2 focus:ring-input-primary focus:shadow-lg focus:shadow-input-primary/20 rounded-xl h-12 px-4 text-sm font-medium text-gray-900 dark:text-white pr-4 focus:outline-none border-none focus:ring-0 transition-all duration-300 cursor-pointer text-center"
+                    value={radius}
+                    onChange={(e) => setRadius(e.target.value)}
+                    disabled={isLoading}
+                  >
+                    <option value="250m">250m</option>
+                    <option value="1km">1km</option>
+                    <option value="5km">5km</option>
+                    <option value="10km">10km</option>
+                    <option value="unlimited">{selectedLanguage === 'en' ? 'Unlimited' : '無限制'}</option>
+                  </select>
                 </div>
+              </div>
 
               {/* Primary Search Button - Staggered entrance + Shimmer */}
-              <div 
+              <div
                 className="mt-2 animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                 style={{ animationDelay: '400ms' }}
               >
@@ -381,27 +407,27 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
                   disabled={isLoading}
                   className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-input-primary to-green-400 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-input-primary/30 transition-all hover:scale-[1.02] hover:shadow-input-primary/50 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed overflow-hidden"
                 >
-                   {/* Shimmer effect */}
-                   <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent z-10" />
-                   
-                   <span className="relative z-10 flex items-center gap-2">
-                      <span>{t.search}</span>
-                      <span className="material-symbols-outlined text-lg font-bold group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                   </span>
+                  {/* Shimmer effect */}
+                  <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent z-10" />
+
+                  <span className="relative z-10 flex items-center gap-2">
+                    <span>{t.search}</span>
+                    <span className="material-symbols-outlined text-lg font-bold group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                  </span>
                 </button>
               </div>
 
               {/* Secondary Random Button - Staggered entrance */}
-               <div 
-                  className="relative flex py-1 items-center animate-in fade-in duration-500 fill-mode-backwards"
-                  style={{ animationDelay: '500ms' }}
-               >
-                  <div className="flex-grow border-t border-gray-300/50 dark:border-white/10"></div>
-                  <span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-bold uppercase tracking-wider">or</span>
-                  <div className="flex-grow border-t border-gray-300/50 dark:border-white/10"></div>
+              <div
+                className="relative flex py-1 items-center animate-in fade-in duration-500 fill-mode-backwards"
+                style={{ animationDelay: '500ms' }}
+              >
+                <div className="flex-grow border-t border-gray-300/50 dark:border-white/10"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-bold uppercase tracking-wider">or</span>
+                <div className="flex-grow border-t border-gray-300/50 dark:border-white/10"></div>
               </div>
 
-              <div 
+              <div
                 className="animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                 style={{ animationDelay: '600ms' }}
               >
@@ -418,9 +444,33 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading }) => 
 
             </form>
           </div>
+
+          {/* History Section - Only visible if logged in and has history */}
+          {history.recommendedHistory.length > 0 && (
+            <div className="mt-8 mx-auto max-w-[90%] animate-in fade-in slide-in-from-bottom-4 duration-700 delay-700">
+              <div className="bg-white/40 dark:bg-black/20 backdrop-blur-md rounded-2xl p-4 border border-white/30 dark:border-white/5">
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wider text-center flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">history</span>
+                  {selectedLanguage === 'en' ? 'Recently Recommended' : '最近推薦'}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {history.recommendedHistory.slice(-8).reverse().map((name, i) => (
+                    <span
+                      key={i}
+                      onClick={() => handleHistoryClick(name)}
+                      className="px-3 py-1 bg-white/60 dark:bg-white/5 rounded-full text-xs font-bold text-gray-700 dark:text-gray-300 border border-white/40 dark:border-white/5 shadow-sm hover:scale-105 transition-all cursor-pointer hover:bg-input-primary hover:text-white"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
-      
+
       {/* Styles for custom animations */}
       <style>{`
         @keyframes shimmer {

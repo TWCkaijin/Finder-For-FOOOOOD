@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { auth } from '../services/firebase';
+import { syncUser } from '../services/api';
 
 interface AuthContextType {
     currentUser: User | null;
@@ -35,6 +36,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (user) {
                 const idToken = await user.getIdToken();
                 setToken(idToken);
+                // Sync user data to backend
+                syncUser(user).catch(err => console.error("Sync failed", err));
             } else {
                 setToken(null);
             }

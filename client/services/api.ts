@@ -1,6 +1,6 @@
 import { auth } from './firebase';
 
-const SERVER_URL = 'http://localhost:5001/api'; // Update if deployed
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const getHeaders = async () => {
     const headers: HeadersInit = {
@@ -55,5 +55,71 @@ export const getPreferences = async () => {
     } catch (error) {
         console.error('Error in getPreferences:', error);
         throw error;
+    }
+};
+
+export const syncUser = async (user: any) => {
+    try {
+        const headers = await getHeaders();
+        const response = await fetch(`${SERVER_URL}/user/sync`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to sync user');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error in syncUser:', error);
+        // Don't throw to prevent blocking the UI
+    }
+};
+
+export const addToHistory = async (keywords?: string | string[], restaurantNames?: string[]) => {
+    try {
+        // Only proceed if user is logged in
+        if (!auth.currentUser) return;
+
+        const headers = await getHeaders();
+        const response = await fetch(`${SERVER_URL}/user/history`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                keywords,
+                restaurantNames
+            }),
+        });
+
+        if (!response.ok) {
+            // Silently fail is okay for history tracking
+            console.warn('Failed to update history', response.statusText);
+        }
+    } catch (error) {
+        console.error('Error in addToHistory:', error);
+    }
+};
+
+export const getHistory = async () => {
+    try {
+        if (!auth.currentUser) return null;
+        const headers = await getHeaders();
+        const response = await fetch(`${SERVER_URL}/user/history`, {
+            method: 'GET',
+            headers,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch history');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error in getHistory:', error);
+        return null;
     }
 };

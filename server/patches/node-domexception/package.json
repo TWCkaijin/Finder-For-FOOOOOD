@@ -1,0 +1,6 @@
+{
+    "name": "node-domexception",
+    "version": "1.0.0",
+    "description": "Local polyfill for DOMException using native implementation",
+    "main": "index.js"
+}
