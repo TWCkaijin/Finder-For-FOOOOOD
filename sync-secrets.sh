@@ -21,11 +21,13 @@ fi
 
 # 2. Upload SERVER_ENV from server/.env
 if [ -f "server/.env" ]; then
-    echo "--- server/.env CONTENT START ---"
-    cat server/.env
+    echo "--- server/.env CONTENT START (Filtered) ---"
+    # Filter out local-only variables like PORT and GOOGLE_APPLICATION_CREDENTIALS
+    FILTERED_ENV=$(grep -vE "^(PORT=|GOOGLE_APPLICATION_CREDENTIALS=)" server/.env)
+    echo "$FILTERED_ENV"
     echo "--- server/.env CONTENT END ---"
     echo "🚀 Uploading SERVER_ENV..."
-    gh secret set SERVER_ENV < server/.env
+    gh secret set SERVER_ENV --body "$FILTERED_ENV"
 else
     echo "⚠️  Warning: server/.env not found."
 fi
