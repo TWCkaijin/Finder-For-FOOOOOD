@@ -6,7 +6,8 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { fetchRestaurants } from './services/geminiService';
 import { AuthButton } from './components/AuthButton';
 import { useAuth } from './contexts/AuthContext';
-import { getPreferences, savePreferences } from './services/api';
+import { getPreferences, savePreferences, addToHistory } from './services/api';
+import { ActionLogger } from './components/ActionLogger';
 import { useEffect } from 'react';
 
 const App: React.FC = () => {
@@ -118,6 +119,11 @@ const App: React.FC = () => {
         isBackgroundFetching: true
       }));
 
+      // Track history
+      if (currentUser) {
+        addToHistory(params.keywords, initialDisplay.map(r => r.name));
+      }
+
       // Phase 2: Background Fetch (Fetching more without user waiting)
       // Note: We use existing results names to try to find DIFFERENT ones, but Schema mode is stricter.
       const excludeNames = results.map(r => r.name);
@@ -219,6 +225,7 @@ const App: React.FC = () => {
 
   return (
     <div className="antialiased text-gray-900 bg-white dark:bg-gray-900 min-h-screen relative">
+      <ActionLogger />
       <div className="absolute top-4 right-4 z-50">
         <AuthButton />
       </div>

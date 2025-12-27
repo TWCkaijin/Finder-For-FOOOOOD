@@ -1,3 +1,4 @@
+import { onRequest } from 'firebase-functions/v2/https';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -11,6 +12,9 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+import { requestLogger } from './middleware/loggerMiddleware';
+app.use(requestLogger);
 
 // Initialize Firebase
 initializeFirebase();
@@ -27,6 +31,19 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-});
+
+
+// Export the Express app as a Cloud Function
+// This "api" export will be the entry point for Firebase Functions
+export const api = onRequest({
+    // Set explicit options if needed, e.g. region, memory, etc.
+    // cors: true // handled by express middleware
+}, app);
+
+// Start server locally only if not running in Cloud Functions environment
+// Firebase Emulator sets process.env.FUNCTIONS_EMULATOR to 'true'
+if (!process.env.FUNCTION_TARGET && !process.env.FUNCTIONS_EMULATOR) {
+    app.listen(port, () => {
+        console.log(`Server is running on port ${port}`);
+    });
+}

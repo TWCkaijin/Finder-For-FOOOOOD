@@ -25,18 +25,12 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: "client/pnpm-lock.yaml"
 
-      - name: Install and Build
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
-          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
-          FIREBASE_MEASUREMENT_ID: ${{ secrets.FIREBASE_MEASUREMENT_ID }}
+      - name: Build Client
         run: |
           cd client
+          # Restore Client .env
+          echo "${{ secrets.CLIENT_ENV }}" > .env
+
           pnpm install --frozen-lockfile
           pnpm run build
 
@@ -48,3 +42,42 @@ jobs:
           channelId: live
           projectId: finder-for-foooood
           entryPoint: ./client
+
+      - name: Deploy Server Functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/service-account.json
+        run: |
+          # 1. Setup Auth
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_FINDER_FOR_FOOOOOD }}' > /tmp/service-account.json
+
+          # 2. Setup Server
+          cd server
+          pnpm install --frozen-lockfile
+
+          # 3. Restore Server .env
+          echo "${{ secrets.SERVER_ENV }}" > .env
+
+          # 4. Install Firebase Tools
+          pnpm add -g firebase-tools
+
+          # 5. Deploy using our script
+          # Use 'pnpm exec' or rely on global install. 
+          # The script uses 'firebase deploy'. We need to make sure 'firebase' is in path.
+          # pnpm add -g puts it in pnpm global bin?
+          # Let's try running via npx to be safe if global install is flaky in actions.
+          # Actually, the script `deploy-with-env.ts` calls `execSync('firebase ...')`.
+          # We can alias firebase to npx firebase-tools?
+          # Or just install it locally in server package.
+
+          pnpm add -D firebase-tools
+
+          # Modify the script execution to use local binary?
+          # No, 'firebase' command is expected in shell.
+          # Let's add it to PATH or use npx.
+          # Creating an alias/wrapper:
+          echo '#!/bin/bash' > firebase
+          echo 'npx firebase-tools "$@"' >> firebase
+          chmod +x firebase
+          export PATH=$PWD:$PATH
+
+          pnpm run deploy:env

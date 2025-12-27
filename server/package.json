@@ -6,7 +6,10 @@
     "scripts": {
         "start": "node dist/index.js",
         "dev": "tsx watch src/index.ts",
-        "deploy": "firebase deploy --only functions"
+        "build": "tsc",
+        "deploy": "firebase deploy --only functions",
+        "deploy:env": "tsx scripts/deploy-with-env.ts",
+        "serve": "npm run build && firebase emulators:start"
     },
     "dependencies": {
         "@genkit-ai/firebase": "^1.26.0",
