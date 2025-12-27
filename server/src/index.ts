@@ -11,7 +11,17 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+
+// Conditionally apply body parser
+// In Cloud Functions Gen 2, req.body might already be parsed by the platform
+app.use((req, res, next) => {
+    if (req.body) {
+        next();
+    } else {
+        express.json()(req, res, next);
+    }
+});
 
 import { requestLogger } from './middleware/loggerMiddleware';
 app.use(requestLogger);
@@ -32,16 +42,12 @@ app.get('/', (req, res) => {
 
 // Start server
 
-
-// Export the Express app as a Cloud Function
-// This "api" export will be the entry point for Firebase Functions
 export const api = onRequest({
-    // Set explicit options if needed, e.g. region, memory, etc.
-    // cors: true // handled by express middleware
+    cors: true,
+    invoker: 'public', // Allow unauthenticated access (Cloud Run Invoker role for allUsers)
 }, app);
 
-// Start server locally ONLY if LOCAL_DEV is set
-// This prevents the server from trying to listen on a port during deployment or in Cloud Functions
+
 if (process.env.LOCAL_DEV === 'true') {
     app.listen(port, () => {
         console.log(`Server is running on port ${port}`);

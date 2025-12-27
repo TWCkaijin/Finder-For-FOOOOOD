@@ -36,18 +36,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeFirebase = void 0;
 const admin = __importStar(require("firebase-admin"));
 const initializeFirebase = () => {
-    try {
-        const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-        if (serviceAccountPath) {
+    if (admin.apps.length === 0) {
+        try {
             admin.initializeApp();
-            console.log('Firebase Admin initialized with credentials file.');
+            console.log('Firebase Admin initialized.');
         }
-        else {
-            console.warn('No Firebase credentials found. Firebase Admin not fully initialized.');
+        catch (error) {
+            console.error('Error initializing Firebase Admin:', error);
         }
-    }
-    catch (error) {
-        console.error('Error initializing Firebase Admin:', error);
     }
 };
 exports.initializeFirebase = initializeFirebase;
