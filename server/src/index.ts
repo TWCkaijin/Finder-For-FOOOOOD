@@ -40,9 +40,9 @@ export const api = onRequest({
     // cors: true // handled by express middleware
 }, app);
 
-// Start server locally only if not running in Cloud Functions environment
-// Firebase Emulator sets process.env.FUNCTIONS_EMULATOR to 'true'
-if (!process.env.FUNCTION_TARGET && !process.env.FUNCTIONS_EMULATOR) {
+// Start server locally ONLY if run directly (e.g. node index.js)
+// This prevents the server from trying to listen on a port when imported by Firebase Functions
+if (require.main === module) {
     app.listen(port, () => {
         console.log(`Server is running on port ${port}`);
     });
