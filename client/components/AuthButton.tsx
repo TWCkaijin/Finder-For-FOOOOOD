@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-export const AuthButton: React.FC = () => {
+interface AuthButtonProps {
+    onAvatarClick?: () => void;
+    onLogout?: () => void;
+}
+
+export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout }) => {
     const { currentUser, signInWithGoogle, logout } = useAuth();
     const [error, setError] = useState<string | null>(null);
 
@@ -19,6 +24,7 @@ export const AuthButton: React.FC = () => {
         try {
             setError(null);
             await logout();
+            if (onLogout) onLogout();
         } catch (err) {
             setError('Failed to log out');
             console.error(err);
@@ -34,7 +40,10 @@ export const AuthButton: React.FC = () => {
             )}
 
             {currentUser ? (
-                <div className="group flex items-center gap-3 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-full p-1.5 pr-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/80 dark:hover:bg-black/60">
+                <div
+                    onClick={onAvatarClick}
+                    className="group flex items-center gap-3 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-full p-1.5 pr-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/80 dark:hover:bg-black/60 cursor-pointer"
+                >
                     {currentUser.photoURL ? (
                         <img
                             src={currentUser.photoURL}
@@ -55,7 +64,10 @@ export const AuthButton: React.FC = () => {
                     </div>
 
                     <button
-                        onClick={handleLogout}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleLogout();
+                        }}
                         className="ml-1 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-all duration-200"
                         title="Sign Out"
                     >

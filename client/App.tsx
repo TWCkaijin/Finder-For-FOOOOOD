@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { AppState, Restaurant, SearchParams } from './types';
 import { InputView } from './components/InputView';
 import { ResultView } from './components/ResultView';
+import { SettingsView } from './components/SettingsView';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { fetchRestaurants } from './services/geminiService';
 import { AuthButton } from './components/AuthButton';
@@ -29,7 +30,7 @@ const App: React.FC = () => {
   // Ref to hold the AbortController
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
 
   // Load preferences when user logs in
   useEffect(() => {
@@ -60,7 +61,8 @@ const App: React.FC = () => {
       displayedRestaurants: [],
       shownRestaurantIds: new Set(),
       isDeveloperMode: isDevMode,
-      streamOutput: ''
+      streamOutput: '',
+      isLogoutTransition: false
     }));
 
     if (currentUser) {
@@ -89,7 +91,7 @@ const App: React.FC = () => {
         limit,
         params.model,
         params.language,
-        [],
+        params.excludedNames || [],
         isDevMode ? onStreamUpdate : undefined,
         controller.signal
       );
@@ -108,25 +110,38 @@ const App: React.FC = () => {
       const initialDisplay = results;
       results.forEach(r => initialShownIds.add(r.id));
 
+      // Trigger "Finishing" animation
       setState(prev => ({
         ...prev,
-        view: 'result',
-        loading: false,
-        allRestaurants: results,
-        shownRestaurantIds: initialShownIds,
-        displayedRestaurants: initialDisplay,
-        error: null,
-        isBackgroundFetching: true
+        isFinishing: true,
+        pendingResults: initialDisplay
       }));
 
-      // Track history
-      if (currentUser) {
-        addToHistory(params.keywords, initialDisplay.map(r => r.name));
-      }
+      setTimeout(() => {
+        if (controller.signal.aborted) return;
+
+        setState(prev => ({
+          ...prev,
+          view: 'result',
+          loading: false,
+          isFinishing: false,
+          pendingResults: undefined,
+          allRestaurants: results,
+          shownRestaurantIds: initialShownIds,
+          displayedRestaurants: initialDisplay,
+          error: null,
+          isBackgroundFetching: true
+        }));
+
+        // Track history
+        if (currentUser) {
+          addToHistory(params.keywords, initialDisplay.map(r => r.name));
+        }
+      }, 500);
 
       // Phase 2: Background Fetch (Fetching more without user waiting)
       // Note: We use existing results names to try to find DIFFERENT ones, but Schema mode is stricter.
-      const excludeNames = results.map(r => r.name);
+      const excludeNames = results.map(r => r.name).concat(params.excludedNames || []);
 
       fetchRestaurants(params.location, params.keywords, params.radius, 9, params.model, params.language, excludeNames).then((moreResults) => {
         // Only update if the user hasn't started a new search or cancelled
@@ -215,9 +230,40 @@ const App: React.FC = () => {
       view: 'input',
       allRestaurants: [],
       displayedRestaurants: [],
-      isBackgroundFetching: false
+      isBackgroundFetching: false,
+      isLogoutTransition: false
     }));
   }, []);
+
+  const handleGoToSettings = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      view: 'settings',
+      lastView: (prev.view === 'input' || prev.view === 'result') ? prev.view : prev.lastView,
+      isLogoutTransition: false
+    }));
+  }, []);
+
+  const handleBackFromSettings = useCallback(() => {
+    setState(prev => ({ ...prev, view: prev.lastView || 'input' }));
+  }, []);
+
+  const handleLogoutFromSettings = useCallback(async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.error("Logout failed", e);
+    }
+    setState(prev => ({
+      ...prev,
+      view: 'input',
+      allRestaurants: [],
+      displayedRestaurants: [],
+      shownRestaurantIds: new Set(),
+      lastView: undefined,
+      isLogoutTransition: true
+    }));
+  }, [logout]);
 
   const isExhausted = !state.isBackgroundFetching &&
     state.allRestaurants.length > 0 &&
@@ -227,7 +273,10 @@ const App: React.FC = () => {
     <div className="antialiased text-gray-900 bg-white dark:bg-gray-900 min-h-screen relative">
       <ActionLogger />
       <div className="absolute top-4 right-4 z-50">
-        <AuthButton />
+        <AuthButton
+          onAvatarClick={state.view === 'settings' ? handleLogoutFromSettings : handleGoToSettings}
+          onLogout={handleLogoutFromSettings}
+        />
       </div>
       {state.loading && (
         <LoadingOverlay
@@ -238,11 +287,14 @@ const App: React.FC = () => {
           language={state.params.language}
           onClose={handleCloseLoading}
           onCancel={handleCancelSearch}
+          isFinishing={state.isFinishing}
         />
       )}
 
-      {state.view === 'input' ? (
-        <InputView onSearch={handleSearch} isLoading={state.loading} />
+      {state.view === 'settings' ? (
+        <SettingsView onUiBack={handleBackFromSettings} onLogout={handleLogoutFromSettings} />
+      ) : state.view === 'input' ? (
+        <InputView onSearch={handleSearch} isLoading={state.loading} startWithLogoutAnimation={state.isLogoutTransition} />
       ) : (
         <ResultView
           restaurants={state.displayedRestaurants}

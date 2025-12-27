@@ -27,6 +27,8 @@ export const SearchRestaurantsInputSchema = z.object({
     limit: z.number().optional().default(6),
     language: z.enum(['zh-TW', 'en', 'ja']).optional().default('zh-TW'),
     excludeNames: z.array(z.string()).optional().default([]),
+    context: z.string().optional(),
+    model: z.string().optional(),
 });
 
 export const RestaurantSchema = z.object({
@@ -56,7 +58,9 @@ export const searchRestaurantsFlow = ai.defineFlow({
         radius,
         limit,
         language,
-        excludeNames
+        excludeNames,
+        context,
+        model
     } = input;
 
     const finalKeywords = keywords?.trim() ? keywords : (language === 'en' ? "good food, high rating" : "美食, 高評分");
@@ -80,6 +84,7 @@ export const searchRestaurantsFlow = ai.defineFlow({
     const promptText = `
       Task: Find exactly ${limit} real, existing restaurants near "${location}" matching "${finalKeywords}".
       ${excludeInstruction}
+      ${context ? `\n      User Personal Preferences:\n      ${context}` : ""}
       
       Constraints:
       1. Language: Output ONLY in ${targetLanguage}.
@@ -92,6 +97,7 @@ export const searchRestaurantsFlow = ai.defineFlow({
     const { output } = await ai.generate({
         prompt: promptText,
         output: { schema: RestaurantListSchema }, // Enforce structured output
+        model: model || "googleai/gemini-2.0-flash-exp",
         config: {
             temperature: 0.2,
         }
