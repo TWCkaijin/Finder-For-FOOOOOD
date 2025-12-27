@@ -26,11 +26,13 @@ jobs:
           cache-dependency-path: "client/pnpm-lock.yaml"
 
       - name: Build Client
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Only VITE_ env vars are bundled by Vite unless you use define.
+          # Assuming your vite config handles these or they are just placeholders?
+          # Client keys should start with VITE_ usually.
         run: |
           cd client
-          # Restore Client .env
-          echo "${{ secrets.CLIENT_ENV }}" > .env
-
           pnpm install --frozen-lockfile
           pnpm run build
 
@@ -54,8 +56,9 @@ jobs:
           cd server
           pnpm install --frozen-lockfile
 
-          # 3. Restore Server .env
-          echo "${{ secrets.SERVER_ENV }}" > .env
+          # 3. Create .env from Secrets
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" >> .env
 
           # 4. Install Firebase Tools
           pnpm add -g firebase-tools
