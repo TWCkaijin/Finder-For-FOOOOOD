@@ -1,6 +1,7 @@
 import { auth } from './firebase';
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+console.log('🔗 API Service connected to:', SERVER_URL);
 
 const getHeaders = async () => {
     const headers: HeadersInit = {

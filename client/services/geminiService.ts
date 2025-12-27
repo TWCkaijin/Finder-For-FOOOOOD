@@ -1,6 +1,7 @@
 import { Restaurant, Language } from "../types";
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+console.log('🔗 Gemini Service connected to:', SERVER_URL);
 
 export const fetchRestaurants = async (
   location: string,
