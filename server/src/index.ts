@@ -33,6 +33,8 @@ app.get('/', (req, res) => {
 // Start server
 
 export const api = onRequest({
+    cors: true,
+    invoker: 'public', // Allow unauthenticated access (Cloud Run Invoker role for allUsers)
 }, app);
 
 
