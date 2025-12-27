@@ -32,16 +32,10 @@ app.get('/', (req, res) => {
 
 // Start server
 
-
-// Export the Express app as a Cloud Function
-// This "api" export will be the entry point for Firebase Functions
 export const api = onRequest({
-    // Set explicit options if needed, e.g. region, memory, etc.
-    // cors: true // handled by express middleware
 }, app);
 
-// Start server locally ONLY if LOCAL_DEV is set
-// This prevents the server from trying to listen on a port during deployment or in Cloud Functions
+
 if (process.env.LOCAL_DEV === 'true') {
     app.listen(port, () => {
         console.log(`Server is running on port ${port}`);

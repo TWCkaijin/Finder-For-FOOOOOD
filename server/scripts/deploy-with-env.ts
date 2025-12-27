@@ -32,23 +32,53 @@ console.log('Preparing to deploy configuration...');
 
 // Create a temporary .env.deploy file (redundant if we use the gitignore strategy, but kept for backup)
 const deployEnvPath = path.resolve(__dirname, '../.env.deploy');
-fs.copyFileSync(envPath, deployEnvPath);
+const gitignorePath = path.resolve(__dirname, '../.gitignore');
+
+// Main execution
+let originalEnvContent = '';
+let originalGitignoreContent = '';
 
 try {
+    console.log('Preparing to deploy configuration...');
+
+    // 1. Read original .env content
+    if (fs.existsSync(envPath)) {
+        originalEnvContent = fs.readFileSync(envPath, 'utf-8');
+    }
+
+    // 2. Filter out reserved keys (PORT) and local-only keys
+    const envLines = originalEnvContent.split('\n');
+    const filteredLines = envLines.filter(line => {
+        const trimmed = line.trim();
+        // Skip empty lines or comments
+        if (!trimmed || trimmed.startsWith('#')) return true;
+
+        // Check key
+        const [key] = trimmed.split('=');
+        const forbiddenKeys = ['PORT', 'GOOGLE_APPLICATION_CREDENTIALS'];
+        if (forbiddenKeys.includes(key.trim())) {
+            console.log(`Skipping local-only key for deployment: ${key}`);
+            return false;
+        }
+        return true;
+    });
+
+    const filteredEnvContent = filteredLines.join('\n');
+
+    // 3. Write filtered content to .env
+    fs.writeFileSync(envPath, filteredEnvContent);
+
+    // 4. Modify .gitignore to allow .env
     console.log('Temporarily un-ignoring .env for deployment...');
-
-    // We modify .gitignore to explicitly include .env (using !.env)
-    // This forces Firebase Deploy to upload the .env file with the function code.
-    const serverGitignorePath = path.resolve(__dirname, '../.gitignore');
-    let originalContent = '';
-
-    if (fs.existsSync(serverGitignorePath)) {
-        originalContent = fs.readFileSync(serverGitignorePath, 'utf8');
-        if (!originalContent.includes('!.env')) {
-            fs.appendFileSync(serverGitignorePath, '\n!.env\n');
+    if (fs.existsSync(gitignorePath)) {
+        originalGitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+        // Ensure !.env is present
+        if (!originalGitignoreContent.includes('!.env')) {
+            fs.writeFileSync(gitignorePath, originalGitignoreContent + '\n!.env');
         }
     } else {
-        fs.writeFileSync(serverGitignorePath, '!.env\n');
+        // If .gitignore doesn't exist, create it with !.env
+        fs.writeFileSync(gitignorePath, '!.env\n');
     }
 
     console.log('Running build...');
@@ -57,23 +87,31 @@ try {
     console.log('Running deploy...');
     execSync('firebase deploy --only functions', { stdio: 'inherit' });
 
+    console.log('Deployment successful!');
+
 } catch (error) {
     console.error('Deployment failed:', error);
     process.exit(1);
 } finally {
-    // Restore .gitignore to original state to ensure .env remains ignored
-    const serverGitignorePath = path.resolve(__dirname, '../.gitignore');
-    if (fs.existsSync(deployEnvPath)) fs.unlinkSync(deployEnvPath);
+    console.log('Cleaning up...');
 
-    try {
-        const currentContent = fs.readFileSync(serverGitignorePath, 'utf8');
-        if (currentContent.includes('!.env')) {
-            const newContent = currentContent.replace(/\n!.env\n/g, '').replace(/!.env\n/g, '').replace(/\n!.env/g, '');
-            fs.writeFileSync(serverGitignorePath, newContent || originalContent);
-        }
-    } catch (e) {
-        console.error("Failed to restore .gitignore", e);
+    // Restore original .env
+    if (originalEnvContent && fs.existsSync(envPath)) {
+        console.log('Restoring .env...');
+        fs.writeFileSync(envPath, originalEnvContent);
     }
 
-    console.log('Cleaned up.');
+    // Restore original .gitignore
+    if (fs.existsSync(gitignorePath)) {
+        // If we had original content, restore it. 
+        // If we created it fresh, delete it? No, safer to just strip !.env
+        if (originalGitignoreContent) {
+            fs.writeFileSync(gitignorePath, originalGitignoreContent);
+        } else {
+            // Fallback cleanup if original was empty or we created it
+            const current = fs.readFileSync(gitignorePath, 'utf-8');
+            const restored = current.replace(/\n!.env/g, '').replace(/!.env/g, '');
+            fs.writeFileSync(gitignorePath, restored);
+        }
+    }
 }
