@@ -21,8 +21,9 @@ fi
 
 # 2. Upload SERVER_ENV from server/.env
 if [ -f "server/.env" ]; then
-    echo "📂 Reading server/.env..."
-    # Warning: GitHub Secrets have a size limit (64KB), usually enough for .env
+    echo "--- server/.env CONTENT START ---"
+    cat server/.env
+    echo "--- server/.env CONTENT END ---"
     echo "🚀 Uploading SERVER_ENV..."
     gh secret set SERVER_ENV < server/.env
 else
@@ -39,7 +40,9 @@ elif [ -f "client/.env" ]; then
 fi
 
 if [ ! -z "$CLIENT_ENV_FILE" ]; then
-    echo "📂 Reading $CLIENT_ENV_FILE..."
+    echo "--- $CLIENT_ENV_FILE CONTENT START ---"
+    cat "$CLIENT_ENV_FILE"
+    echo "--- $CLIENT_ENV_FILE CONTENT END ---"
     echo "🚀 Uploading CLIENT_ENV..."
     gh secret set CLIENT_ENV < "$CLIENT_ENV_FILE"
 else
