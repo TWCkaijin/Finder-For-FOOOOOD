@@ -39,7 +39,8 @@ const inputSchema = z.object({
     language: z.string().optional().default('en'),
     excludeNames: z.array(z.string()).optional().default([]),
     userLat: z.number().optional(),
-    userLng: z.number().optional()
+    userLng: z.number().optional(),
+    model: z.string().optional()
 });
 
 function parseRadiusMeters(radiusStr?: string): number {
@@ -74,7 +75,7 @@ function formatDistance(km: number): string {
 // POST /api/ai/search
 router.post('/search', async (req, res) => {
     try {
-        const { location, keywords, radius, limit, language, excludeNames, userLat, userLng } = inputSchema.parse(req.body);
+        const { location, keywords, radius, limit, language, excludeNames, userLat, userLng, model } = inputSchema.parse(req.body);
 
         // Try to determine search center (for bias and distance calc)
         let centerLat = userLat;
@@ -95,8 +96,11 @@ router.post('/search', async (req, res) => {
 
         const searchRadiusMeters = parseRadiusMeters(radius);
 
-        // Fetch user history if logged in to exclude recently recommended restaurants
+        // Fetch user history and preferences
         let historyExcludes: string[] = [];
+        let blacklistedNames: string[] = [];
+        let contextString = "";
+
         const authHeader = req.headers.authorization;
 
         if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -106,17 +110,36 @@ router.post('/search', async (req, res) => {
                 const userDoc = await admin.firestore().collection('userCollection').doc(decodedToken.uid).get();
                 if (userDoc.exists) {
                     const data = userDoc.data();
+
+                    // History
                     if (data?.recommendedHistory && Array.isArray(data.recommendedHistory)) {
-                        // Take the last 50 items to keep prompt size manageable
                         historyExcludes = data.recommendedHistory.slice(-50);
+                    }
+
+                    // Preferences
+                    const prefs = data?.preferences || {};
+                    if (prefs.blacklist && Array.isArray(prefs.blacklist)) {
+                        blacklistedNames = prefs.blacklist;
+                    }
+
+                    // Ratings Analysis
+                    if (prefs.ratings) {
+                        const ratings = Object.values(prefs.ratings) as any[];
+                        const liked = ratings.filter(r => r.rating >= 4).map(r => r.name);
+                        const disliked = ratings.filter(r => r.rating <= 2).map(r => r.name);
+
+                        const parts = [];
+                        if (liked.length > 0) parts.push(`User previously liked these places: ${liked.slice(-10).join(', ')}. Recommend similar styles.`);
+                        if (disliked.length > 0) parts.push(`User disliked: ${disliked.slice(-10).join(', ')}. Avoid similar styles.`);
+                        contextString = parts.join('\n');
                     }
                 }
             } catch (e) {
-                console.warn('Failed to fetch history for AI search:', e);
+                console.warn('Failed to fetch history/prefs for AI search:', e);
             }
         }
 
-        const finalExcludes = [...new Set([...excludeNames, ...historyExcludes])];
+        const finalExcludes = [...new Set([...excludeNames, ...historyExcludes, ...blacklistedNames])];
 
 
         // Call Genkit Flow
@@ -126,7 +149,9 @@ router.post('/search', async (req, res) => {
             radius: radius || "1km",
             limit: Number(limit),
             language: language as any,
-            excludeNames: finalExcludes
+            excludeNames: finalExcludes,
+            context: contextString,
+            model
         });
 
         // Verification Step: Enhance data with Google Places API

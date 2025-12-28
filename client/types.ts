@@ -17,6 +17,23 @@ export interface Restaurant {
 export type SearchMode = 'list' | 'random';
 export type Language = 'zh-TW' | 'en' | 'ja';
 
+export interface RestaurantRating {
+  restaurantId: string;
+  name: string;
+  rating: number; // 1-5
+  comment?: string;
+  timestamp: number;
+}
+
+export interface UserPreferences {
+  language?: Language;
+  defaultModel?: string;
+  blacklist?: string[];
+  ratings?: { [restaurantId: string]: RestaurantRating };
+  pendingReviews?: { id: string; name: string; timestamp: number }[];
+  devMode?: boolean;
+}
+
 export interface SearchParams {
   location: string;
   keywords: string;
@@ -26,10 +43,12 @@ export interface SearchParams {
   language: Language; // New: Selected Language
   userLat?: number;
   userLng?: number;
+  excludedNames?: string[];
 }
 
 export interface AppState {
-  view: 'input' | 'result';
+  view: 'input' | 'result' | 'settings';
+  lastView?: 'input' | 'result';
   loading: boolean;
   loadingMessage: string;
   loadingError: string | null; // New: Specific error state for the overlay
@@ -41,4 +60,8 @@ export interface AppState {
   isBackgroundFetching: boolean;
   isDeveloperMode: boolean;
   streamOutput: string;
+  isFinishing?: boolean;
+  pendingResults?: Restaurant[];
+  isLogoutTransition?: boolean;
+  language?: Language;
 }
