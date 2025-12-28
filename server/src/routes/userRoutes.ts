@@ -26,10 +26,9 @@ router.get('/preferences', authenticateUser, async (req: AuthenticatedRequest, r
 router.post('/preferences', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
         const uid = req.user!.uid;
-        const preferences = req.body;
-
-        // Merge true allows updating specific fields without overwriting everything
-        await admin.firestore().collection('userCollection').doc(uid).set({ preferences }, { merge: true });
+        // req.body should be { preferences: { ... } }
+        // We want to merge this directly into the doc
+        await admin.firestore().collection('userCollection').doc(uid).set(req.body, { merge: true });
 
         res.json({ message: 'Preferences saved successfully' });
     } catch (error) {

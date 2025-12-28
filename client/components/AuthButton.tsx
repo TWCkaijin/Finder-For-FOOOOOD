@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
+import { getTranslation, LanguageCode } from '../i18n';
+
 interface AuthButtonProps {
     onAvatarClick?: () => void;
     onLogout?: () => void;
+    language?: LanguageCode;
 }
 
-export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout }) => {
+export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout, language }) => {
     const { currentUser, signInWithGoogle, logout } = useAuth();
+    const t = getTranslation(language || 'zh-TW');
     const [error, setError] = useState<string | null>(null);
 
     const handleLogin = async () => {
@@ -15,7 +19,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout 
             setError(null);
             await signInWithGoogle();
         } catch (err) {
-            setError('Failed to log in');
+            setError(t.auth.failedLogin);
             console.error(err);
         }
     };
@@ -26,7 +30,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout 
             await logout();
             if (onLogout) onLogout();
         } catch (err) {
-            setError('Failed to log out');
+            setError(t.auth.failedLogout);
             console.error(err);
         }
     };
@@ -57,7 +61,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout 
                     )}
 
                     <div className="flex flex-col mr-1">
-                        <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold leading-none mb-0.5">Welcome</span>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold leading-none mb-0.5">{t.auth.welcome}</span>
                         <span className="text-xs font-bold text-gray-800 dark:text-gray-100 leading-none max-w-[100px] truncate">
                             {currentUser.displayName?.split(' ')[0]}
                         </span>
@@ -69,7 +73,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({ onAvatarClick, onLogout 
                             handleLogout();
                         }}
                         className="ml-1 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-all duration-200"
-                        title="Sign Out"
+                        title={t.auth.signOut}
                     >
                         <span className="material-symbols-outlined text-[18px]">logout</span>
                     </button>

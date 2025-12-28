@@ -10,6 +10,7 @@ import { useAuth } from './contexts/AuthContext';
 import { getPreferences, savePreferences, addToHistory } from './services/api';
 import { ActionLogger } from './components/ActionLogger';
 import { useEffect } from 'react';
+import { LanguageCode } from './i18n';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -24,7 +25,9 @@ const App: React.FC = () => {
     displayedRestaurants: [],
     isBackgroundFetching: false,
     isDeveloperMode: false,
-    streamOutput: ''
+    streamOutput: '',
+    language: 'zh-TW', // Added language to AppState
+    isLogoutTransition: false
   });
 
   // Ref to hold the AbortController
@@ -40,6 +43,10 @@ const App: React.FC = () => {
           console.log("Loaded preferences:", prefs);
           // Optional: merge prefs into state.params if you want to restore last search
           // setState(prev => ({ ...prev, params: { ...prev.params, ...prefs.preferences } }));
+          // If preferences include language, update the top-level language state
+          if (prefs.preferences.language) {
+            setState(prev => ({ ...prev, language: prefs.preferences.language as LanguageCode }));
+          }
         }
       }).catch(err => console.error("Failed to load prefs", err));
     }
@@ -56,7 +63,7 @@ const App: React.FC = () => {
       loading: true,
       loadingMessage: `Searching...`, // This base message is less important now, Overlay handles it
       loadingError: null,
-      params,
+      params: { ...params, language: prev.language }, // Ensure params use the current top-level language state
       allRestaurants: [],
       displayedRestaurants: [],
       shownRestaurantIds: new Set(),
@@ -66,7 +73,7 @@ const App: React.FC = () => {
     }));
 
     if (currentUser) {
-      savePreferences({ preferences: params }).catch(e => console.error("Failed to save preferences", e));
+      savePreferences({ preferences: { ...params, language: state.language } }).catch(e => console.error("Failed to save preferences", e));
     }
 
     try {
@@ -90,7 +97,7 @@ const App: React.FC = () => {
         params.radius,
         limit,
         params.model,
-        params.language,
+        state.language, // Use the top-level language state
         params.excludedNames || [],
         isDevMode ? onStreamUpdate : undefined,
         controller.signal
@@ -100,7 +107,7 @@ const App: React.FC = () => {
       if (controller.signal.aborted) return;
 
       if (results.length === 0) {
-        throw new Error(params.language === 'en' ? "No restaurants found." : "找不到符合條件的餐廳");
+        throw new Error(state.language === 'en' ? "No restaurants found." : "找不到符合條件的餐廳");
       }
 
       const initialShownIds = new Set<string>();
@@ -143,7 +150,7 @@ const App: React.FC = () => {
       // Note: We use existing results names to try to find DIFFERENT ones, but Schema mode is stricter.
       const excludeNames = results.map(r => r.name).concat(params.excludedNames || []);
 
-      fetchRestaurants(params.location, params.keywords, params.radius, 9, params.model, params.language, excludeNames).then((moreResults) => {
+      fetchRestaurants(params.location, params.keywords, params.radius, 9, params.model, state.language, excludeNames).then((moreResults) => {
         // Only update if the user hasn't started a new search or cancelled
         if (abortControllerRef.current === controller && !controller.signal.aborted) {
           setState(current => {
@@ -172,7 +179,7 @@ const App: React.FC = () => {
         loadingError: errorMsg
       }));
     }
-  }, []);
+  }, [currentUser, state.language]); // Added state.language to dependencies
 
   const handleCancelSearch = useCallback(() => {
     // 1. Abort the underlying request
@@ -265,6 +272,17 @@ const App: React.FC = () => {
     }));
   }, [logout]);
 
+  const handleLanguageChange = useCallback((lang: LanguageCode) => {
+    setState(prev => ({
+      ...prev,
+      language: lang,
+      params: { ...prev.params, language: lang } // Also update language in params
+    }));
+    if (currentUser) {
+      savePreferences({ preferences: { ...state.params, language: lang } }).catch(e => console.error("Failed to save language preference", e));
+    }
+  }, [currentUser, state.params]);
+
   const isExhausted = !state.isBackgroundFetching &&
     state.allRestaurants.length > 0 &&
     state.allRestaurants.every(r => state.shownRestaurantIds.has(r.id));
@@ -276,6 +294,7 @@ const App: React.FC = () => {
         <AuthButton
           onAvatarClick={state.view === 'settings' ? handleLogoutFromSettings : handleGoToSettings}
           onLogout={handleLogoutFromSettings}
+          language={state.language} // Pass language to AuthButton
         />
       </div>
       {state.loading && (
@@ -284,7 +303,7 @@ const App: React.FC = () => {
           error={state.loadingError}
           isDevMode={state.isDeveloperMode}
           streamOutput={state.streamOutput}
-          language={state.params.language}
+          language={state.language} // Use top-level language state
           onClose={handleCloseLoading}
           onCancel={handleCancelSearch}
           isFinishing={state.isFinishing}
@@ -292,9 +311,20 @@ const App: React.FC = () => {
       )}
 
       {state.view === 'settings' ? (
-        <SettingsView onUiBack={handleBackFromSettings} onLogout={handleLogoutFromSettings} />
+        <SettingsView
+          onUiBack={handleBackFromSettings}
+          onLogout={handleLogoutFromSettings}
+          currentLanguage={state.language} // Pass current language
+          onLanguageChange={handleLanguageChange} // Pass language change handler
+        />
       ) : state.view === 'input' ? (
-        <InputView onSearch={handleSearch} isLoading={state.loading} startWithLogoutAnimation={state.isLogoutTransition} />
+        <InputView
+          onSearch={handleSearch}
+          isLoading={state.loading}
+          startWithLogoutAnimation={state.isLogoutTransition}
+          currentLanguage={state.language} // Pass current language
+          onLanguageChange={handleLanguageChange} // Pass language change handler
+        />
       ) : (
         <ResultView
           restaurants={state.displayedRestaurants}
@@ -303,6 +333,7 @@ const App: React.FC = () => {
           onNext={handleNext}
           isExhausted={isExhausted}
           isBackgroundFetching={state.isBackgroundFetching}
+          currentLanguage={state.language} // Pass current language
         />
       )}
     </div>

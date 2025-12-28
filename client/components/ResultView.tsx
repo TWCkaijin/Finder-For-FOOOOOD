@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Restaurant, SearchParams } from '../types';
 import { getPreferences, savePreferences } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { getTranslation, LanguageCode } from '../i18n';
 
 // Leaflet types hack
 declare global {
@@ -35,6 +36,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const { currentUser } = useAuth();
   const [checkinLoading, setCheckinLoading] = useState(false);
 
+  const t = getTranslation((params.language as LanguageCode) || 'zh-TW');
+
   // Check-in Handler
   const handleVisit = async (r: Restaurant) => {
     if (!currentUser) {
@@ -45,15 +48,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
     try {
       const data = await getPreferences();
       const prefs = data?.preferences || {};
-      const pending = prefs.pendingReviews || [];
+      const pending = [...(prefs.pendingReviews || [])];
 
       // Avoid duplicates
       if (!pending.some((p: any) => p.id === r.id)) {
         pending.push({ id: r.id, name: r.name, timestamp: Date.now() });
         await savePreferences({ preferences: { ...prefs, pendingReviews: pending } });
-        alert(params.language === 'en' ? "Added to Pending Reviews!" : "已加入待評分清單！");
+        await savePreferences({ preferences: { ...prefs, pendingReviews: pending } });
+        alert(t.result.pendingAdded);
       } else {
-        alert(params.language === 'en' ? "Already check-in pending." : "已經在清單中了");
+        alert(t.result.alreadyPending);
       }
     } catch (e) {
       console.error(e);
@@ -126,7 +130,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     if (params.userLat && params.userLng) {
       const userIcon = window.L.divIcon({ className: 'user-pin', iconSize: [16, 16] });
       const userMarker = window.L.marker([params.userLat, params.userLng], { icon: userIcon })
-        .bindPopup("您的位置")
+        .bindPopup(t.input.yourLocation)
         .addTo(mapInstance.current);
       markersRef.current.push(userMarker);
       group.addLayer(userMarker);
@@ -206,7 +210,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Coordinate display string
   const coordsDisplay = params.userLat && params.userLng
     ? `${params.userLat.toFixed(4)}, ${params.userLng.toFixed(4)}`
-    : (restaurants[0]?.lat ? `${restaurants[0].lat.toFixed(4)}, ${restaurants[0].lng.toFixed(4)}` : "未知座標");
+    : (restaurants[0]?.lat ? `${restaurants[0].lat.toFixed(4)}, ${restaurants[0].lng.toFixed(4)}` : t.result.unknownCoords);
 
   // Helper for Random Mode Carousel Card
   const currentRestaurant = restaurants[currentCardIndex];
@@ -235,7 +239,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <span>•</span>
                 <span>{modalRestaurant.priceLevel}</span>
                 <span>•</span>
-                <span className="text-green-600 dark:text-green-400 font-medium">{modalRestaurant.isOpen ? "營業中" : "休息中"}</span>
+                <span>•</span>
+                <span className="text-green-600 dark:text-green-400 font-medium">{modalRestaurant.isOpen ? t.result.open : t.result.closed}</span>
               </div>
             </div>
 
@@ -243,7 +248,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               {/* Description */}
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl">
                 <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg">info</span> 餐廳介紹
+                  <span className="material-symbols-outlined text-lg">info</span> {t.result.intro}
                 </h3>
                 <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed">
                   {modalRestaurant.description}
@@ -254,7 +259,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <span className="material-symbols-outlined text-lg text-result-primary">restaurant_menu</span>
-                  必點推薦
+                  {t.result.mustOrder}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {modalRestaurant.recommendedDishes.map((dish, i) => (
@@ -267,7 +272,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
               {/* Address & Navigation */}
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">地址</h3>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">{t.result.address}</h3>
                 <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">{modalRestaurant.address}</p>
                 <div className="flex gap-2">
                   <a
@@ -277,7 +282,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     className="flex-1 flex items-center justify-center gap-2 bg-result-primary text-white py-3 rounded-xl font-bold shadow hover:bg-red-500 transition-colors"
                   >
                     <span className="material-symbols-outlined">directions</span>
-                    Google Maps
+                    {t.result.googleMaps}
                   </a>
                   <button
                     onClick={() => handleVisit(modalRestaurant)}
@@ -289,7 +294,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     ) : (
                       <span className="material-symbols-outlined">storefront</span>
                     )}
-                    <span className="hidden sm:inline">{params.language === 'en' ? 'Check In' : '前往該餐廳'}</span>
+                    <span className="hidden sm:inline">{t.result.checkIn}</span>
                   </button>
                 </div>
               </div>
@@ -306,7 +311,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           </button>
           <div className="flex flex-col">
             <h2 className="text-base font-bold leading-tight">
-              {params.location} {isRandomMode ? "(隨機推薦)" : ""}
+              {params.location} {isRandomMode ? t.result.randomMode : ""}
             </h2>
           </div>
         </div>
@@ -322,7 +327,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               <span className="material-symbols-outlined text-[14px]">radar</span>
               {coordsDisplay}
             </span>
-            <span>{restaurants.length} results</span>
+            <span>{restaurants.length} {t.result.resultsFormat}</span>
           </div>
 
           {/* Content Area: Random Mode vs List Mode */}
@@ -337,7 +342,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
                     {/* Card Badge */}
                     <div className="absolute top-4 left-4 z-10 bg-result-primary text-white text-xs font-bold px-2 py-1 rounded shadow">
-                      推薦 #{currentCardIndex + 1}
+                      {t.result.recommendation} #{currentCardIndex + 1}
                     </div>
 
                     {/* Card Header Pattern */}
@@ -372,14 +377,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                       >
                         <span className="material-symbols-outlined text-sm">visibility</span>
-                        查看詳情
+                        {t.result.viewDetails}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center text-gray-400">
                     <span className="material-symbols-outlined text-4xl mb-2">search_off</span>
-                    <p>暫無資料</p>
+                    <p>{t.result.noData}</p>
                   </div>
                 )}
               </div>
@@ -416,11 +421,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     isBackgroundFetching ? (
                       <>
                         <span className="material-symbols-outlined animate-spin text-lg">sync</span>
-                        <span className="text-sm">尋找中...</span>
+                        <span className="text-sm">{t.result.finding}</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-sm">尋找更多</span>
+                        <span className="text-sm">{t.result.fetchMore}</span>
                         <span className="material-symbols-outlined text-lg">arrow_forward</span>
                       </>
                     )
@@ -435,7 +440,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             <div className="flex-grow overflow-y-auto p-3 space-y-3">
               {restaurants.length === 0 ? (
                 <div className="text-center p-8 opacity-60">
-                  <p>暫無資料</p>
+                  <p>{t.result.noData}</p>
                 </div>
               ) : (
                 restaurants.map((item, index) => {
@@ -478,7 +483,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         className="mt-3 pt-3 border-t border-gray-100 dark:border-white/5 flex items-center text-xs text-result-primary font-bold hover:bg-result-primary/5 rounded px-2 -mx-2 transition-colors"
                       >
                         <span className="material-symbols-outlined text-[16px] mr-1">visibility</span>
-                        點擊查看詳情與菜單
+                        {t.result.tapToSee}
                       </div>
                     </div>
                   )
@@ -489,7 +494,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               <div className="pt-2 pb-6">
                 {isExhausted && !isBackgroundFetching ? (
                   <div className="text-center p-2 rounded bg-gray-50 dark:bg-white/5">
-                    <p className="text-xs opacity-70">已無更多店家</p>
+                    <p className="text-xs opacity-70">{t.result.noMore}</p>
                   </div>
                 ) : (
                   <button
@@ -500,12 +505,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     {isBackgroundFetching ? (
                       <>
                         <span className="material-symbols-outlined text-lg animate-spin">sync</span>
-                        正在搜尋更多店家...
+                        {t.result.searchingMore}
                       </>
                     ) : (
                       <>
                         <span className="material-symbols-outlined text-lg">add_circle</span>
-                        顯示更多店家
+                        {t.result.showMore}
                       </>
                     )}
                   </button>
@@ -521,7 +526,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <div className="absolute bottom-4 left-4 z-[400] pointer-events-none flex flex-col gap-2">
             {params.userLat && (
               <div className="bg-blue-600/90 text-white backdrop-blur px-3 py-1.5 rounded-md shadow text-xs font-bold">
-                點選店家可預覽路徑
+                {t.result.clickPath}
               </div>
             )}
           </div>

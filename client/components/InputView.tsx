@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SearchParams, Language } from '../types';
+import { SearchParams } from '../types';
+import { getTranslation, LanguageCode } from '../i18n';
 import { getHistory, getPreferences } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 interface InputViewProps {
   onSearch: (params: SearchParams, isDevMode: boolean) => void;
+  onHistoryClick: (keywords: string) => void;
+  onGoToSettings: () => void; // Added based on the component destructuring
   isLoading: boolean;
   startWithLogoutAnimation?: boolean;
+  currentLanguage?: LanguageCode;
+  onLanguageChange?: (lang: LanguageCode) => void;
 }
 
 // Internal component for background blobs - Memoized
@@ -48,7 +53,7 @@ const FloatingFood = React.memo(() => {
   );
 });
 
-const HistoryBubbles = React.memo(({ items, phase, onSelect }: { items: string[], phase: 'hidden' | 'dropped' | 'sides', onSelect: (n: string) => void }) => {
+const HistoryBubbles = React.memo(({ items, phase, onSelect, title }: { items: string[], phase: 'hidden' | 'dropped' | 'sides', onSelect: (n: string) => void, title: string }) => {
   // Slots state: Fixed 20 slots. Each has text and visibility status.
   const [slots, setSlots] = useState<{ text: string, visible: boolean }[]>([]);
 
@@ -151,7 +156,7 @@ const HistoryBubbles = React.memo(({ items, phase, onSelect }: { items: string[]
       <div className={`md:hidden fixed bottom-6 left-0 right-0 z-40 flex flex-col gap-2 transition-all duration-700 ${phase === 'sides' ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-2 px-6">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 dark:via-gray-700 to-transparent"></div>
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">History</span>
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{title}</span>
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 dark:via-gray-700 to-transparent"></div>
         </div>
 
@@ -183,15 +188,15 @@ const Bubble = React.memo(({ item, index, total, phase, isVisible, onClick }: an
     const itemsPerSide = 3;
     const sideIndex = Math.floor(index / 2);
 
-    // Full height distribution (5% to 95%)
-    const slotSize = 90 / itemsPerSide;
+    // Constrained height distribution (20% to 80%) per user request
+    const slotSize = 60 / itemsPerSide;
 
-    // Base position
-    const baseTop = 5 + (sideIndex * slotSize) + (Math.random() * (slotSize * 0.4));
+    // Base position starts at 20%
+    const baseTop = 20 + (sideIndex * slotSize) + (Math.random() * (slotSize * 0.6));
 
     return {
       side,
-      topPct: Math.min(Math.max(baseTop, 2), 98),
+      topPct: Math.min(Math.max(baseTop, 20), 80),
       // User wanted offset: use 2% - 8%
       sideOffsetPct: 10 + Math.random() * 6,
       duration: 5 + Math.random() * 5,
@@ -254,7 +259,15 @@ const Bubble = React.memo(({ item, index, total, phase, isVisible, onClick }: an
 
 const INTRO_ICONS = ['🍔', '🍕', '🍜', '🍣', '🍩', '🍦', '☕️', '🍱', '🌭', '🍗', '🥞', '🥗'];
 
-export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, startWithLogoutAnimation = false }) => {
+export const InputView: React.FC<InputViewProps> = ({
+  onSearch,
+  onGoToSettings,
+  onHistoryClick,
+  isLoading,
+  startWithLogoutAnimation,
+  currentLanguage,
+  onLanguageChange
+}) => {
   const { currentUser, signInWithGoogle, loading: authLoading } = useAuth();
   const [displayLocation, setDisplayLocation] = useState('');
   const [hiddenCoords, setHiddenCoords] = useState<string | null>(null);
@@ -264,7 +277,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
 
 
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>('zh-TW');
+  const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>(currentLanguage || 'zh-TW');
   const [isLocating, setIsLocating] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
   const [showError, setShowError] = useState(false);
@@ -288,10 +301,17 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
     return () => clearInterval(interval);
   }, [isIntro, isEntering, isAnimatingOut]);
 
+  // Sync selectedLanguage with currentLanguage prop
+  useEffect(() => {
+    if (currentLanguage) {
+      setSelectedLanguage(currentLanguage);
+    }
+  }, [currentLanguage]);
+
   // Handle Start with Logout Animation
   useEffect(() => {
     if (startWithLogoutAnimation) {
-      // We start with isAnimatingOut = true (from state init).
+      setIsAnimatingOut(true); // We start with isAnimatingOut = true (from state init).
       // Now schedule the collapse to normal state.
       // This creates the "Implode" effect (Scale 5 -> Scale 1).
       const t = setTimeout(() => {
@@ -347,7 +367,11 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
       // Load Preferences
       getPreferences().then(data => {
         if (data?.preferences) {
-          if (data.preferences.language) setSelectedLanguage(data.preferences.language);
+          if (data.preferences.language) {
+            const lang = data.preferences.language as LanguageCode;
+            setSelectedLanguage(lang);
+            if (onLanguageChange) onLanguageChange(lang);
+          }
           if (data.preferences.defaultModel) setSelectedModel(data.preferences.defaultModel);
           if (data.preferences.devMode !== undefined) setIsDevMode(data.preferences.devMode);
         }
@@ -437,7 +461,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
   const validateInput = (): boolean => {
     if (!displayLocation.trim()) {
       setShowError(true);
-      alert(selectedLanguage === 'en' ? "Please enter a location" : "請輸入地點");
+      alert(t.input.required);
       return false;
     }
     return true;
@@ -483,7 +507,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert("您的瀏覽器不支援地理定位");
+      alert("Browser does not support geolocation");
       return;
     }
     setIsLocating(true);
@@ -493,12 +517,12 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
         const { latitude, longitude } = position.coords;
         const coords = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
         setHiddenCoords(coords);
-        setDisplayLocation(selectedLanguage === 'en' ? "📍 Your Location" : "📍 您的目前位置");
+        setDisplayLocation(t.input.yourLocation);
         setIsLocating(false);
       },
       (error) => {
         console.error("Geolocation error:", error);
-        alert(selectedLanguage === 'en' ? "Cannot retrieve location" : "無法獲取您的位置");
+        alert(t.input.cannotRetrieve);
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -521,55 +545,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
     }
   }, [currentUser, isIntro, authLoading]);
 
-  const i18n = {
-    'zh-TW': {
-      title: '尋找您的下一頓美食',
-      subtitle: '輸入地點，讓 AI 為您推薦最佳選擇',
-      location: '地點',
-      placeholderLoc: '輸入地標或地址',
-      locate: '定位',
-      keyword: '關鍵字 (選填)',
-      placeholderKey: '例：拉麵、咖啡、氣氛好',
-      radius: '距離範圍',
-      aiModel: 'AI 模型',
-      language: '語言',
-      search: '開始搜尋',
-      random: '隨機推薦 (完全沒想法？)',
-      nearby: '附近'
-    },
-    'en': {
-      title: 'Find Your Next Meal',
-      subtitle: 'Enter a location, let AI recommend the best.',
-      location: 'Location',
-      placeholderLoc: 'Landmark or address',
-      locate: 'Locate',
-      keyword: 'Keywords (Optional)',
-      placeholderKey: 'e.g., Ramen, Coffee, Cozy',
-      radius: 'Radius',
-      aiModel: 'AI Model',
-      language: 'Language',
-      search: 'Start Search',
-      random: 'I\'m Feeling Lucky (Random)',
-      nearby: 'Nearby'
-    },
-    'ja': {
-      title: '次の食事を見つけよう',
-      subtitle: '場所を入力して、AIにおすすめを聞く',
-      location: '場所',
-      placeholderLoc: 'ランドマークまたは住所',
-      locate: '現在地',
-      keyword: 'キーワード (任意)',
-      placeholderKey: '例：ラーメン、コーヒー',
-      radius: '距離',
-      aiModel: 'AI モデル',
-      language: '言語',
-      search: '検索開始',
-      random: 'お任せ (ランダム)',
-      nearby: '近く'
-    }
-  };
-
-  const t = i18n[selectedLanguage];
+  const t = getTranslation(selectedLanguage);
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-gray-50 dark:bg-[#0a0a0a] font-display transition-colors animate-in fade-in zoom-in-95 duration-1000">
@@ -612,14 +588,14 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                   {isEntering ? (
                     <>
                       <span className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full"></span>
-                      <span>Loading...</span>
+                      <span>{t.input.loading}</span>
                     </>
                   ) : (
-                    currentUser ? (selectedLanguage === 'en' ? 'ENTER' : '進入') : (selectedLanguage === 'en' ? 'LOGIN TO START' : '登入以開始')
+                    currentUser ? t.input.enter : t.input.loginToStart
                   )}
                 </button>
                 <p className="mt-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-                  {currentUser ? 'Welcome Back' : 'Log in to sync history'}
+                  {currentUser ? t.input.welcomeBack : t.input.loginToSync}
                 </p>
               </div>
             </div>
@@ -633,11 +609,11 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
               <h1 className="flex items-center justify-center gap-3 text-4xl sm:text-5xl font-black leading-tight tracking-tighter drop-shadow-sm">
                 <span className="filter drop-shadow-md">{INTRO_ICONS[introIconIndex]}</span>
                 <span className="bg-gradient-to-r from-green-600 via-emerald-500 to-teal-500 dark:from-green-400 dark:via-emerald-300 dark:to-teal-300 bg-clip-text text-transparent">
-                  {t.title}
+                  {t.app.title}
                 </span>
               </h1>
               <p className="mt-3 text-base sm:text-lg text-gray-600 dark:text-gray-300 font-medium">
-                {t.subtitle}
+                {t.app.subtitle}
               </p>
             </div>
 
@@ -668,13 +644,13 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                   style={{ animationDelay: '100ms' }}
                 >
                   <p className={`text-sm font-bold leading-normal pb-1.5 transition-colors ${showError ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                    {t.location} {showError && <span className="text-xs font-normal ml-1">({selectedLanguage === 'en' ? 'Required' : '必填'})</span>}
+                    {t.input.location} {showError && <span className="text-xs font-normal ml-1">({t.input.required})</span>}
                   </p>
                   <div className={`flex w-full items-stretch rounded-xl shadow-sm transition-all duration-300 ring-1 ${showError ? 'ring-red-400 shadow-red-100' : 'ring-gray-200 dark:ring-white/10 focus-within:ring-2 focus-within:ring-input-primary focus-within:shadow-lg focus-within:shadow-input-primary/20'}`}>
                     <div className="relative flex-grow z-10">
                       <input
                         className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-l-xl bg-transparent h-12 px-4 text-sm font-medium text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none border-none focus:ring-0"
-                        placeholder={t.placeholderLoc}
+                        placeholder={t.input.placeholderLoc}
                         value={displayLocation}
                         onChange={handleLocationChange}
                         disabled={isLoading || isLocating}
@@ -695,7 +671,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                       ) : (
                         <>
                           <span className="material-symbols-outlined text-lg">my_location</span>
-                          <span className="hidden sm:inline">{t.locate}</span>
+                          <span className="hidden sm:inline">{t.input.locate}</span>
                         </>
                       )}
                     </button>
@@ -707,10 +683,10 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                   style={{ animationDelay: '200ms' }}
                 >
                   <div className="flex justify-between items-center pb-1.5">
-                    <p className="text-sm font-bold leading-normal text-gray-700 dark:text-gray-200">{t.keyword}</p>
+                    <p className="text-sm font-bold leading-normal text-gray-700 dark:text-gray-200">{t.input.keyword}</p>
                     <label className="flex items-center cursor-pointer gap-2 group/toggle">
                       <span className="text-xs font-medium text-gray-400 group-hover/toggle:text-input-primary transition-colors duration-300">
-                        {selectedLanguage === 'en' ? 'Remove History' : '移除歷史推薦'}
+                        {t.input.removeHistory}
                       </span>
                       <div className="relative">
                         <input
@@ -726,7 +702,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                   <div className="relative flex w-full items-center rounded-xl bg-transparent ring-1 ring-gray-200 dark:ring-white/10 shadow-sm focus-within:ring-2 focus-within:ring-input-primary focus-within:shadow-lg focus-within:shadow-input-primary/20 transition-all duration-300">
                     <input
                       className="flex w-full min-w-0 flex-1 bg-transparent h-12 px-4 text-sm font-medium text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none border-none focus:ring-0 rounded-xl"
-                      placeholder={t.placeholderKey}
+                      placeholder={t.input.placeholderKey}
                       value={keywords}
                       onChange={(e) => setKeywords(e.target.value)}
                       disabled={isLoading}
@@ -740,7 +716,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                   className="flex flex-col flex-1 animate-in slide-in-from-bottom-2 fade-in duration-500 fill-mode-backwards"
                   style={{ animationDelay: '300ms' }}
                 >
-                  <p className="text-sm font-bold leading-normal pb-1.5 text-gray-700 dark:text-gray-200">{t.radius}</p>
+                  <p className="text-sm font-bold leading-normal pb-1.5 text-gray-700 dark:text-gray-200">{t.input.radius}</p>
                   <div className="relative group">
                     <select
                       className="appearance-none flex w-full min-w-0 flex-1 bg-transparent ring-1 ring-gray-200 dark:ring-white/10 shadow-sm focus:ring-2 focus:ring-input-primary focus:shadow-lg focus:shadow-input-primary/20 rounded-xl h-12 px-4 text-sm font-medium text-gray-900 dark:text-white pr-4 focus:outline-none border-none focus:ring-0 transition-all duration-300 cursor-pointer text-center"
@@ -752,7 +728,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                       <option value="1km">1km</option>
                       <option value="5km">5km</option>
                       <option value="10km">10km</option>
-                      <option value="unlimited">{selectedLanguage === 'en' ? 'Unlimited' : '無限制'}</option>
+                      <option value="unlimited">{t.input.unlimited}</option>
                     </select>
                   </div>
                 </div>
@@ -771,7 +747,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent z-10" />
 
                     <span className="relative z-10 flex items-center gap-2">
-                      <span>{t.search}</span>
+                      <span>{t.input.search}</span>
                       <span className="material-symbols-outlined text-lg font-bold group-hover:translate-x-1 transition-transform">arrow_forward</span>
                     </span>
                   </button>
@@ -798,7 +774,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 dark:bg-white/5 border border-transparent hover:border-gray-200 dark:hover:border-white/10 px-6 py-3 text-sm font-bold text-gray-600 dark:text-gray-300 transition-all hover:bg-gray-200 dark:hover:bg-white/10 active:scale-[0.98] disabled:opacity-70"
                   >
                     <span className="material-symbols-outlined text-lg">casino</span>
-                    <span>{t.random}</span>
+                    <span>{t.input.random}</span>
                   </button>
                 </div>
 
@@ -813,6 +789,7 @@ export const InputView: React.FC<InputViewProps> = ({ onSearch, isLoading, start
           items={history.recommendedHistory}
           phase={isLoading ? 'hidden' : bubblePhase}
           onSelect={handleHistoryClick}
+          title={t.input.historyTitle}
         />
 
         {/* Styles for custom animations */}

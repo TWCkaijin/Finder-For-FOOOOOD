@@ -63,4 +63,5 @@ export interface AppState {
   isFinishing?: boolean;
   pendingResults?: Restaurant[];
   isLogoutTransition?: boolean;
+  language?: Language;
 }

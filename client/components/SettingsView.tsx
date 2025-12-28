@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getPreferences, savePreferences } from '../services/api';
 import { UserPreferences, RestaurantRating } from '../types';
+import { getTranslation, LanguageCode } from '../i18n';
 
 interface SettingsViewProps {
     onUiBack: () => void;
@@ -19,12 +20,14 @@ const LANGUAGES = [
     { id: 'ja', name: '日本語' },
 ];
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout, currentLanguage, onLanguageChange }) => {
     const { currentUser, logout } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [prefs, setPrefs] = useState<UserPreferences>({});
     const [newBlacklist, setNewBlacklist] = useState('');
+
+    const t = getTranslation(currentLanguage || (prefs.language as LanguageCode) || 'zh-TW');
 
     // State for rating flow
     const [ratingTarget, setRatingTarget] = useState<{ id: string, name: string } | null>(null);
@@ -33,7 +36,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
         if (currentUser) {
             getPreferences().then(data => {
                 if (data && data.preferences) {
-                    setPrefs(data.preferences);
+                    // Handle legacy double-nesting bug
+                    if ((data.preferences as any).preferences) {
+                        setPrefs((data.preferences as any).preferences);
+                    } else {
+                        setPrefs(data.preferences);
+                    }
                 }
                 setLoading(false);
             }).catch(err => {
@@ -117,10 +125,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                         >
                             <span className="material-symbols-outlined text-gray-600 dark:text-gray-300">arrow_back</span>
                         </button>
-                        <h1 className="text-2xl font-black text-gray-900 dark:text-white">Settings</h1>
+                        <h1 className="text-2xl font-black text-gray-900 dark:text-white">{t.settings.title}</h1>
                     </div>
                     <div className="flex items-center gap-3">
-                        {isSaving && <span className="text-xs text-gray-400 flex items-center gap-1"><span className="animate-spin material-symbols-outlined text-sm">sync</span> Saving...</span>}
+                        {isSaving && <span className="text-xs text-gray-400 flex items-center gap-1"><span className="animate-spin material-symbols-outlined text-sm">sync</span> {t.settings.saving}</span>}
                         <button
                             onClick={handleLogout}
                             className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors flex items-center justify-center"
@@ -134,20 +142,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
 
                     {/* 1. General Settings (Language & Model) */}
                     <section>
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">General Preferences</h2>
+                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{t.settings.general}</h2>
                         <div className="space-y-4">
                             {/* Language */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 bg-gray-50 dark:bg-black/20 rounded-xl">
                                 <div className="flex items-center gap-3">
                                     <span className="material-symbols-outlined text-gray-500">language</span>
-                                    <span className="font-bold text-gray-700 dark:text-gray-200">Language</span>
+                                    <span className="font-bold text-gray-700 dark:text-gray-200">{t.settings.language}</span>
                                 </div>
                                 <select
                                     value={prefs.language || 'zh-TW'}
-                                    onChange={(e) => updateField('language', e.target.value)}
-                                    className="bg-white dark:bg-zinc-800 border-none rounded-lg py-2 px-4 pr-8 text-sm font-bold focus:ring-2 focus:ring-input-primary outline-none"
+                                    onChange={(e) => {
+                                        const newLang = e.target.value as LanguageCode;
+                                        setPrefs(prev => ({ ...prev, language: newLang }));
+                                        savePreferences({ preferences: { ...prefs, language: newLang } });
+                                        if (onLanguageChange) onLanguageChange(newLang);
+                                    }}
+                                    className="bg-gray-100 dark:bg-black/40 border-none rounded-lg text-sm font-bold text-gray-700 dark:text-gray-200 px-3 py-2 outline-none cursor-pointer"
                                 >
-                                    {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                    <option value="zh-TW">繁體中文</option>
+                                    <option value="en">English</option>
+                                    <option value="ja">日本語</option>
                                 </select>
                             </div>
 
@@ -156,8 +171,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                                 <div className="flex items-center gap-3">
                                     <span className="material-symbols-outlined text-gray-500">smart_toy</span>
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-gray-700 dark:text-gray-200">AI Model</span>
-                                        <span className="text-xs text-gray-400">Controls generation speed & quality</span>
+                                        <span className="font-bold text-gray-700 dark:text-gray-200">{t.settings.aiModel}</span>
+                                        <span className="text-xs text-gray-400">{t.settings.aiDesc}</span>
                                     </div>
                                 </div>
                                 <select
@@ -174,8 +189,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                                 <div className="flex items-center gap-3">
                                     <span className="material-symbols-outlined text-gray-500">code</span>
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-gray-700 dark:text-gray-200">Developer Mode</span>
-                                        <span className="text-xs text-gray-400">Show raw AI responses & debug info</span>
+                                        <span className="font-bold text-gray-700 dark:text-gray-200">{t.settings.devMode}</span>
+                                        <span className="text-xs text-gray-400">{t.settings.devDesc}</span>
                                     </div>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
@@ -193,11 +208,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
 
                     {/* 2. History & Blacklist */}
                     <section>
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">History & Tuning</h2>
+                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{t.settings.historyAndBlacklist}</h2>
                         <div className="p-6 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="material-symbols-outlined text-red-400">block</span>
-                                <h3 className="font-bold text-gray-800 dark:text-gray-100">Blacklist (Never Recommend)</h3>
+                                <h3 className="font-bold text-gray-800 dark:text-gray-100">{t.settings.blacklist}</h3>
                             </div>
                             <div className="flex gap-2 mb-4">
                                 <input
@@ -205,19 +220,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                                     value={newBlacklist}
                                     onChange={(e) => setNewBlacklist(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddBlacklist()}
-                                    placeholder="Type keyword or restaurant name..."
+                                    placeholder={t.settings.blacklistPlaceholder}
                                     className="flex-grow px-4 py-2 rounded-lg bg-white dark:bg-zinc-800 border-none focus:ring-2 focus:ring-red-400 outline-none text-sm"
                                 />
                                 <button
                                     onClick={handleAddBlacklist}
                                     className="px-4 py-2 bg-gray-200 dark:bg-zinc-700 hover:bg-gray-300 dark:hover:bg-zinc-600 rounded-lg font-bold text-gray-600 dark:text-gray-300 transition-colors"
                                 >
-                                    Add
+                                    {t.settings.add}
                                 </button>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {(!prefs.blacklist || prefs.blacklist.length === 0) && (
-                                    <span className="text-xs text-gray-400 italic">No blacklisted items yet.</span>
+                                    <span className="text-xs text-gray-400 italic">{t.settings.noBlacklist}</span>
                                 )}
                                 {prefs.blacklist?.map(item => (
                                     <span key={item} className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300 rounded-full text-xs font-medium group">
@@ -234,10 +249,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                     {/* 3. Pending Reviews */}
                     <section>
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Pending Reviews</h2>
+                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t.settings.pendingReviews}</h2>
                             {(prefs.pendingReviews?.length || 0) > 0 && (
                                 <span className="bg-yellow-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                    {prefs.pendingReviews?.length} To Do
+                                    {prefs.pendingReviews?.length} {t.settings.todo}
                                 </span>
                             )}
                         </div>
@@ -245,7 +260,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                         {(!prefs.pendingReviews || prefs.pendingReviews.length === 0) ? (
                             <div className="p-8 text-center bg-gray-50 dark:bg-black/10 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
                                 <span className="material-symbols-outlined text-gray-300 text-4xl mb-2">rate_review</span>
-                                <p className="text-gray-400 text-sm">No restaurants pending for review.<br />Visit a restaurant from the map to add it here!</p>
+                                <p className="text-gray-400 text-sm">{t.settings.noPending}</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -256,7 +271,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                                             onClick={() => setRatingTarget(item)}
                                             className="px-4 py-1.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 rounded-lg text-sm font-bold transition-colors shadow-sm"
                                         >
-                                            Rate Now
+                                            {t.settings.rateNow}
                                         </button>
                                     </div>
                                 ))}
@@ -266,9 +281,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
 
                     {/* 4. Rated Restaurants (Brief List) */}
                     <section>
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">My Ratings</h2>
+                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{t.settings.myRatings}</h2>
                         {(!prefs.ratings || Object.keys(prefs.ratings).length === 0) ? (
-                            <p className="text-xs text-gray-400 ml-2">No rated restaurants yet.</p>
+                            <p className="text-xs text-gray-400 ml-2">{t.settings.noRatings}</p>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                                 {(Object.values(prefs.ratings || {}) as RestaurantRating[])
@@ -296,58 +311,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onUiBack, onLogout }
                         className="w-full py-3 bg-white dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-900/10 text-red-600 dark:text-red-400 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700"
                     >
                         <span className="material-symbols-outlined">logout</span>
-                        Sign Out
+                        {t.settings.logout}
                     </button>
                 </div>
 
-            </div>
+                {/* Rating Modal */}
+                {ratingTarget && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
+                            <button onClick={() => setRatingTarget(null)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-800 dark:hover:text-white">
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
 
-            {/* Rating Modal */}
-            {ratingTarget && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
-                        <button onClick={() => setRatingTarget(null)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-800 dark:hover:text-white">
-                            <span className="material-symbols-outlined">close</span>
-                        </button>
+                            <h3 className="text-xl font-black text-center mb-1">{t.settings.rateExperience}</h3>
+                            <p className="text-center text-gray-500 mb-6">{ratingTarget.name}</p>
 
-                        <h3 className="text-xl font-black text-center mb-1">Rate Experience</h3>
-                        <p className="text-center text-gray-500 mb-6">{ratingTarget.name}</p>
+                            <div className="flex justify-center gap-2 mb-8">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <button
+                                        key={star}
+                                        onClick={() => submitRating(star)}
+                                        className="group p-2 hover:scale-110 transition-transform"
+                                    >
+                                        <span className={`material-symbols-outlined text-4xl ${star <= 3 ? 'text-gray-200 hover:text-yellow-400' : 'text-gray-200 hover:text-yellow-400'} fill-1`}>star</span>
+                                        {/* Hover effect logic in CSS is tricky here without state, so I'll simplify: Click to rate immediately? Or Click to select? */}
+                                        {/* User asked for score 1-5. Let's make it simple: 5 buttons. */}
+                                    </button>
+                                ))}
+                                {/* Better implementation: Hover state. */}
+                            </div>
 
-                        <div className="flex justify-center gap-2 mb-8">
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <button
-                                    key={star}
-                                    onClick={() => submitRating(star)}
-                                    className="group p-2 hover:scale-110 transition-transform"
-                                >
-                                    <span className={`material-symbols-outlined text-4xl ${star <= 3 ? 'text-gray-200 hover:text-yellow-400' : 'text-gray-200 hover:text-yellow-400'} fill-1`}>star</span>
-                                    {/* Hover effect logic in CSS is tricky here without state, so I'll simplify: Click to rate immediately? Or Click to select? */}
-                                    {/* User asked for score 1-5. Let's make it simple: 5 buttons. */}
-                                </button>
-                            ))}
-                            {/* Better implementation: Hover state. */}
-                        </div>
-
-                        {/* Alternative: Star Rating Input */}
-                        <div className="grid grid-cols-5 gap-2">
-                            {[1, 2, 3, 4, 5].map(score => (
-                                <button
-                                    key={score}
-                                    onClick={() => submitRating(score)}
-                                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${score >= 4 ? 'border-green-100 bg-green-50 hover:border-green-500 hover:bg-green-100' :
-                                        score <= 2 ? 'border-red-100 bg-red-50 hover:border-red-500 hover:bg-red-100' :
-                                            'border-yellow-100 bg-yellow-50 hover:border-yellow-400 hover:bg-yellow-100'
-                                        }`}
-                                >
-                                    <span className={`text-2xl font-bold ${score >= 4 ? 'text-green-600' : score <= 2 ? 'text-red-600' : 'text-yellow-600'
-                                        }`}>{score}</span>
-                                    <span className="text-[10px] uppercase font-bold text-gray-400">Stars</span>
-                                </button>
-                            ))}
+                            {/* Alternative: Star Rating Input */}
+                            <div className="grid grid-cols-5 gap-2">
+                                {[1, 2, 3, 4, 5].map(score => (
+                                    <button
+                                        key={score}
+                                        onClick={() => submitRating(score)}
+                                        className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${score >= 4 ? 'border-green-100 bg-green-50 hover:border-green-500 hover:bg-green-100' :
+                                            score <= 2 ? 'border-red-100 bg-red-50 hover:border-red-500 hover:bg-red-100' :
+                                                'border-yellow-100 bg-yellow-50 hover:border-yellow-400 hover:bg-yellow-100'
+                                            }`}
+                                    >
+                                        <span className={`text-2xl font-bold ${score >= 4 ? 'text-green-600' : score <= 2 ? 'text-red-600' : 'text-yellow-600'
+                                            }`}>{score}</span>
+                                        <span className="text-[10px] uppercase font-bold text-gray-400">Stars</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
